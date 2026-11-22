@@ -38,6 +38,11 @@ type TabKey = 'synthesis' | 'portfolio' | 'news' | 'advisor';
 
 export default function WealthViewPage() {
   const [unlocked, setUnlocked] = useState<boolean>(false);
+  const [clientNow, setClientNow] = useState<Date>(() => new Date("2026-11-22T00:00:00Z"));
+
+  useEffect(() => {
+    setClientNow(new Date());
+  }, []);
   const [activeTab, setActiveTab] = useState<TabKey>('synthesis');
   const [timeframe, setTimeframe] = useState<TimeframeKey>('Tout');
   const [holdings, setHoldings] = useState<PortfolioHolding[]>(INITIAL_HOLDINGS);
@@ -96,7 +101,7 @@ export default function WealthViewPage() {
     async (items: PortfolioHolding[], tf: TimeframeKey) => {
       setLoadingQuotes(true);
       try {
-        const q = await fetchQuotesForHoldings(items, tf);
+        const q = await fetchQuotesForHoldings(items, tf, clientNow);
         setQuotes(q);
       } finally {
         setLoadingQuotes(false);
@@ -112,8 +117,8 @@ export default function WealthViewPage() {
   }, [unlocked, holdings, timeframe, refreshQuotes]);
 
   const enriched = useMemo(
-    () => enrichHoldings(holdings, quotes, timeframe),
-    [holdings, quotes, timeframe]
+    () => enrichHoldings(holdings, quotes, timeframe, clientNow),
+    [holdings, quotes, timeframe, clientNow]
   );
 
   const series = useMemo(() => buildPortfolioSeries(enriched), [enriched]);
