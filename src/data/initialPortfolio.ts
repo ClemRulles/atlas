@@ -35,9 +35,9 @@ export const TICKER_SUGGESTIONS: TickerSuggestion[] = [
   { symbol: 'BE0167243154', name: 'KBC Equity Fund Trends Classic Cap', category: 'Fonds', currency: 'EUR', fallbackPriceEur: 285.43 },
   { symbol: 'LU0111465380', name: 'BNPP Global Megatrends Classic Cap', category: 'Fonds', currency: 'EUR', fallbackPriceEur: 265.56 },
   { symbol: 'LU0119124781', name: 'BNPP Consumer Innov Cap', category: 'Fonds', currency: 'EUR', fallbackPriceEur: 315.53 },
-  { symbol: 'BTC-EUR', name: 'Bitcoin EUR', category: 'Crypto', currency: 'EUR' },
-  { symbol: 'ETH-EUR', name: 'Ethereum EUR', category: 'Crypto', currency: 'EUR' },
-  { symbol: 'GC=F', name: 'Or (Gold Futures)', category: 'Or / Matières premières', currency: 'USD' },
+  { symbol: 'BTC/EUR', name: 'Bitcoin EUR', category: 'Crypto', currency: 'EUR' },
+  { symbol: 'ETH/EUR', name: 'Ethereum EUR', category: 'Crypto', currency: 'EUR' },
+  { symbol: 'XAU/USD', name: 'Or (Spot Gold)', category: 'Or / Matières premières', currency: 'USD' },
 ];
 
 export const INITIAL_HOLDINGS: PortfolioHolding[] = [
@@ -214,4 +214,6 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Crypto: '#F59E0B',
   Cash: '#10B981',
   'Or / Matières premières': '#EAB308',
+  EUR: '#1E3A8A',
+  USD: '#0EA5E9',
 };

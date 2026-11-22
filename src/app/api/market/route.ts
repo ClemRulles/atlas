@@ -1,21 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
-import yahooFinance from 'yahoo-finance2';
 
-interface YahooQuoteShape {
-  regularMarketPrice?: number;
-  regularMarketPreviousClose?: number;
-  currency?: string;
-  shortName?: string;
-  longName?: string;
+function toTwelveDataSymbol(rawSym: string): string {
+  const sym = rawSym.trim().toUpperCase();
+  if (sym.endsWith('.PA')) return `${sym.slice(0, -3)}:EPA`;
+  if (sym.endsWith('.AS')) return `${sym.slice(0, -3)}:AMS`;
+  if (sym.endsWith('.DE')) return `${sym.slice(0, -3)}:XETR`;
+  if (sym.endsWith('.BR')) return `${sym.slice(0, -3)}:EBR`;
+  if (sym.endsWith('.L')) return `${sym.slice(0, -2)}:LSE`;
+  if (sym === 'BTC-EUR') return 'BTC/EUR';
+  if (sym === 'ETH-EUR') return 'ETH/EUR';
+  if (sym === 'GC=F') return 'XAU/USD';
+  return sym;
 }
 
-interface YahooChartPoint {
-  close?: number | null;
-  date?: Date | string | null;
-}
-
-interface YahooChartShape {
-  quotes?: YahooChartPoint[];
+function getIntervalAndOutputSize(timeframe: string): { interval: string; outputsize: number } {
+  switch (timeframe) {
+    case '1J':
+      return { interval: '15min', outputsize: 40 };
+    case '1S':
+      return { interval: '1h', outputsize: 60 };
+    case '1M':
+      return { interval: '1day', outputsize: 30 };
+    case 'YTD':
+      return { interval: '1day', outputsize: 230 };
+    case 'LTM':
+      return { interval: '1day', outputsize: 252 };
+    case '2A':
+      return { interval: '1week', outputsize: 104 };
+    case '5A':
+      return { interval: '1week', outputsize: 260 };
+    case '10A':
+      return { interval: '1month', outputsize: 120 };
+    case 'Tout':
+    default:
+      return { interval: '1month', outputsize: 180 };
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -23,107 +42,94 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const symbols: string[] = Array.isArray(body?.symbols) ? body.symbols : [];
     const timeframe: string = body?.timeframe || '1M';
+    const apiKey = process.env.TWELVEDATA_API_KEY;
 
     let eurUsdRate = 1.0968;
+
+    if (!apiKey) {
+      return NextResponse.json({ quotes: {}, eurUsdRate, missingKey: true });
+    }
+
     try {
-      const fx = (await yahooFinance.quote('EURUSD=X')) as YahooQuoteShape | null;
-      if (fx && typeof fx.regularMarketPrice === 'number' && fx.regularMarketPrice > 0) {
-        eurUsdRate = fx.regularMarketPrice;
+      const fxRes = await fetch(
+        `https://api.twelvedata.com/exchange_rate?symbol=EUR/USD&apikey=${encodeURIComponent(apiKey)}`,
+        { cache: 'no-store' }
+      );
+      if (fxRes.ok) {
+        const fxData = await fxRes.json();
+        const rate = parseFloat(fxData?.rate);
+        if (!Number.isNaN(rate) && rate > 0) {
+          eurUsdRate = rate;
+        }
       }
     } catch {
-      // Taux de secours
+      // Garde le taux de secours
     }
 
     if (symbols.length === 0) {
       return NextResponse.json({ quotes: {}, eurUsdRate });
     }
 
-    const now = new Date();
-    const period1 = new Date(now);
-    switch (timeframe) {
-      case '1J':
-        period1.setDate(now.getDate() - 5);
-        break;
-      case '1S':
-        period1.setDate(now.getDate() - 10);
-        break;
-      case '1M':
-        period1.setMonth(now.getMonth() - 1);
-        break;
-      case 'YTD':
-        period1.setFullYear(now.getFullYear(), 0, 1);
-        break;
-      case 'LTM':
-        period1.setFullYear(now.getFullYear() - 1);
-        break;
-      case '2A':
-        period1.setFullYear(now.getFullYear() - 2);
-        break;
-      case '5A':
-        period1.setFullYear(now.getFullYear() - 5);
-        break;
-      case '10A':
-        period1.setFullYear(now.getFullYear() - 10);
-        break;
-      case 'Tout':
-      default:
-        period1.setFullYear(now.getFullYear() - 25);
-        break;
-    }
-
-    const interval = ['2A', '5A', '10A', 'Tout'].includes(timeframe) ? '1wk' : '1d';
+    const { interval, outputsize } = getIntervalAndOutputSize(timeframe);
     const quotes: Record<string, unknown> = {};
 
     await Promise.all(
       symbols.map(async (rawSym) => {
-        const sym = rawSym.trim().toUpperCase();
-        if (!sym) return;
-        try {
-          const quote = (await yahooFinance.quote(sym)) as YahooQuoteShape | null;
-          if (!quote || typeof quote.regularMarketPrice !== 'number') return;
+        const origSym = rawSym.trim().toUpperCase();
+        if (!origSym) return;
 
-          const currency = (quote.currency || 'EUR').toUpperCase() === 'USD' ? 'USD' : 'EUR';
+        // Les ISIN purs (ex. BE0167243154) ne sont pas des tickers cotés sur Twelve Data
+        if (/^[A-Z]{2}[A-Z0-9]{10}$/.test(origSym)) {
+          return;
+        }
+
+        const tdSym = toTwelveDataSymbol(origSym);
+
+        try {
+          const tsUrl = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(
+            tdSym
+          )}&interval=${interval}&outputsize=${outputsize}&apikey=${encodeURIComponent(apiKey)}`;
+
+          const res = await fetch(tsUrl, { cache: 'no-store' });
+          if (!res.ok) return;
+
+          const data = await res.json();
+          if (data?.status === 'error' || !Array.isArray(data?.values) || data.values.length === 0) {
+            return;
+          }
+
+          const rawCurrency = (data?.meta?.currency || 'USD').toUpperCase();
+          const currency = rawCurrency === 'USD' ? 'USD' : 'EUR';
           const toEur = (val: number) => (currency === 'USD' ? val / eurUsdRate : val);
 
-          const priceEur = Number(toEur(quote.regularMarketPrice).toFixed(4));
-          const prevCloseRaw = quote.regularMarketPreviousClose ?? quote.regularMarketPrice;
-          const previousCloseEur = Number(toEur(prevCloseRaw).toFixed(4));
-          const resolvedName = quote.shortName || quote.longName || sym;
+          const ordered = [...data.values].reverse();
+          const history: { date: string; priceEur: number }[] = ordered
+            .map((v: { datetime?: string; close?: string }) => {
+              const closeNum = parseFloat(v.close || '');
+              if (Number.isNaN(closeNum) || closeNum <= 0 || !v.datetime) return null;
+              return {
+                date: v.datetime.slice(0, 10),
+                priceEur: Number(toEur(closeNum).toFixed(4)),
+              };
+            })
+            .filter(Boolean) as { date: string; priceEur: number }[];
 
-          let history: { date: string; priceEur: number }[] = [];
-          try {
-            const chart = (await yahooFinance.chart(sym, {
-              period1,
-              period2: now,
-              interval,
-            })) as YahooChartShape | null;
-            if (chart?.quotes?.length) {
-              history = chart.quotes
-                .filter((q: YahooChartPoint) => typeof q.close === 'number' && Boolean(q.date))
-                .map((q: YahooChartPoint) => ({
-                  date: new Date(q.date as Date | string).toISOString().slice(0, 10),
-                  priceEur: Number(toEur(q.close as number).toFixed(4)),
-                }));
-            }
-          } catch {
-            // Historique optionnel
-          }
+          if (history.length === 0) return;
 
-          if (history.length === 0) {
-            history = [{ date: now.toISOString().slice(0, 10), priceEur }];
-          }
+          const latest = history[history.length - 1];
+          const prev = history.length > 1 ? history[history.length - 2] : latest;
 
-          quotes[sym] = {
-            symbol: sym,
-            name: resolvedName,
+          quotes[origSym] = {
+            symbol: origSym,
+            name: data?.meta?.name || origSym,
             currency,
-            priceEur,
-            previousCloseEur,
+            priceEur: latest.priceEur,
+            previousCloseEur: prev.priceEur,
             history,
             source: 'yahoo',
           };
         } catch {
-          // Symbole introuvable sur Yahoo
+          // Bascule sur valeur manuelle côté client
         }
       })
     );
