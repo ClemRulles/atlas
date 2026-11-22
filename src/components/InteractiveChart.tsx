@@ -20,6 +20,14 @@ interface InteractiveChartProps {
   onRangeSelect?: (range: RangeSelection | null) => void;
 }
 
+function formatShortDate(isoDate: string): string {
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return isoDate;
+  const [, month, day] = parts;
+  const yearShort = parts[0].slice(2);
+  return `${day}/${month}/${yearShort}`;
+}
+
 export default function InteractiveChart({
   data,
   onHoverPoint,
@@ -130,6 +138,11 @@ export default function InteractiveChart({
   const rangeStartCoord = rangeIndices ? coords[rangeIndices[0]] : null;
   const rangeEndCoord = rangeIndices ? coords[rangeIndices[1]] : null;
 
+  const midIdx = Math.floor((data.length - 1) / 2);
+  const startLabel = formatShortDate(data[0].date);
+  const midLabel = formatShortDate(data[midIdx].date);
+  const endLabel = formatShortDate(data[data.length - 1].date);
+
   return (
     <div className="relative w-full">
       <svg
@@ -230,6 +243,13 @@ export default function InteractiveChart({
           </g>
         )}
       </svg>
+
+      {/* Axe des abscisses (échelle de temps) */}
+      <div className="mt-1 pt-1.5 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-[10px] font-medium text-slate-400">
+        <span>{startLabel}</span>
+        <span>{activeIndex !== null ? formatShortDate(data[activeIndex].date) : midLabel}</span>
+        <span>{endLabel}</span>
+      </div>
     </div>
   );
 }

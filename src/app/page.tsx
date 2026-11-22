@@ -72,8 +72,6 @@ export default function WealthAppPage() {
   const [loadingQuotes, setLoadingQuotes] = useState<boolean>(false);
   const [hoverPoint, setHoverPoint] = useState<{ date: string; valueEur: number } | null>(null);
   const [rangeSelection, setRangeSelection] = useState<RangeSelection | null>(null);
-
-  // Catégories ouvertes/fermées dans la page Synthèse (fermées par défaut pour une vue claire)
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
 
   const [modalOpen, setModalOpen] = useState<boolean>(false);
@@ -119,18 +117,14 @@ export default function WealthAppPage() {
     setInstitutions(next);
     try {
       localStorage.setItem(INSTITUTIONS_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Ignore storage error
-    }
+    } catch {}
   };
 
   const persistHoldings = (next: PortfolioHolding[]) => {
     setHoldings(next);
     try {
       localStorage.setItem(HOLDINGS_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Ignore storage error
-    }
+    } catch {}
   };
 
   const refreshQuotes = useCallback(
@@ -184,7 +178,6 @@ export default function WealthAppPage() {
     return (periodDeltaEur / series[0].valueEur) * 100;
   }, [series, periodDeltaEur]);
 
-  // Regroupement par catégorie pour l'accordéon de la page Synthèse
   const groupedByCategory = useMemo(() => {
     const map = new Map<
       AssetCategory,
@@ -231,20 +224,27 @@ export default function WealthAppPage() {
       groupedByCategory.map((g) => ({
         label: g.category,
         valueEur: g.totalValueEur,
+        displayValue: g.totalValueEur,
+        unitSymbol: '€',
       })),
     [groupedByCategory]
   );
 
-  // Répartition par devise (EUR / USD) pour le camembert de l'onglet Portefeuille
+  // Camembert devises : valeur affichée en $ pour USD et en € pour EUR
   const currencySlices = useMemo(() => {
     const map = new Map<string, number>();
     for (const h of enriched) {
       map.set(h.currency, (map.get(h.currency) || 0) + h.currentValueEur);
     }
     return Array.from(map.entries())
-      .map(([label, valueEur]) => ({ label, valueEur }))
+      .map(([label, valueEur]) => ({
+        label,
+        valueEur,
+        displayValue: label === 'USD' ? valueEur * eurUsdRate : valueEur,
+        unitSymbol: label === 'USD' ? '$' : '€',
+      }))
       .sort((a, b) => b.valueEur - a.valueEur);
-  }, [enriched]);
+  }, [enriched, eurUsdRate]);
 
   const institutionGroups = useMemo(() => {
     const map = new Map<string, number>();
@@ -381,11 +381,12 @@ export default function WealthAppPage() {
       }}
       className="min-h-screen bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-white"
     >
+      {/* Header opaque net sans flou iOS */}
       <header
         style={{
-          paddingTop: 'max(0.85rem, env(safe-area-inset-top))',
+          paddingTop: 'max(2.65rem, calc(env(safe-area-inset-top) + 0.5rem))',
         }}
-        className="sticky top-0 z-30 bg-slate-50/90 dark:bg-[#090C12]/90 backdrop-blur-md border-b border-slate-200/70 dark:border-slate-800/80 px-4 pb-3"
+        className="sticky top-0 z-30 bg-slate-50 dark:bg-[#090C12] border-b border-slate-200/80 dark:border-slate-800 px-4 pb-3"
       >
         <div className="max-w-xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -393,7 +394,7 @@ export default function WealthAppPage() {
               type="button"
               onClick={() => setSettingsOpen(true)}
               aria-label="Paramètres et code PIN"
-              className="p-2 rounded-xl bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300 active:scale-95 transition"
+              className="p-2.5 rounded-xl bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200 active:scale-95 transition"
             >
               <Settings className="w-4 h-4" />
             </button>
@@ -408,7 +409,7 @@ export default function WealthAppPage() {
               type="button"
               onClick={() => refreshQuotes(holdings, timeframe)}
               aria-label="Actualiser les cours"
-              className="p-2 rounded-xl bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300"
+              className="p-2.5 rounded-xl bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200"
             >
               <RefreshCw className={`w-4 h-4 ${loadingQuotes ? 'animate-spin' : ''}`} />
             </button>
@@ -416,7 +417,7 @@ export default function WealthAppPage() {
               type="button"
               onClick={() => setUnlocked(false)}
               aria-label="Verrouiller"
-              className="p-2 rounded-xl bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300"
+              className="p-2.5 rounded-xl bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200"
             >
               <Lock className="w-4 h-4" />
             </button>
@@ -436,7 +437,7 @@ export default function WealthAppPage() {
                     ? `Valeur au ${hoverPoint.date}`
                     : 'Valeur totale du portefeuille'}
                 </span>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-950/10 dark:bg-sky-500/15 text-blue-900 dark:text-sky-400 font-semibold">
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold">
                   {holdings.length} actifs
                 </span>
               </div>
@@ -492,7 +493,7 @@ export default function WealthAppPage() {
                       onClick={() => setTimeframe(tf)}
                       className={`flex-1 min-w-[34px] py-1.5 rounded-xl text-[11px] font-bold transition ${
                         active
-                          ? 'bg-white dark:bg-[#1E2638] text-blue-900 dark:text-white shadow-xs'
+                          ? 'bg-white dark:bg-[#1E2638] text-amber-600 dark:text-amber-400 shadow-xs'
                           : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
@@ -525,7 +526,7 @@ export default function WealthAppPage() {
               </div>
             </section>
 
-            {/* Positions regroupées par catégorie avec accordéon dépliable */}
+            {/* Positions regroupées par catégorie (sans bouton Ajouter, sans badge véhicule, uniquement devise) */}
             <section className="space-y-2.5">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold">Mes positions par catégorie</h2>
@@ -537,7 +538,7 @@ export default function WealthAppPage() {
               {groupedByCategory.map((group) => {
                 const isOpen = Boolean(openCategories[group.category]);
                 const groupPos = group.pnlEur >= 0;
-                const dotColor = CATEGORY_COLORS[group.category] || '#6366F1';
+                const dotColor = CATEGORY_COLORS[group.category] || '#EA580C';
 
                 return (
                   <div
@@ -663,7 +664,6 @@ export default function WealthAppPage() {
               <DonutAllocation slices={categorySlices} />
             </section>
 
-            {/* Nouveau camembert des devises */}
             <section className="rounded-3xl bg-white dark:bg-[#131823] p-5 border border-slate-200/70 dark:border-slate-800/80">
               <h2 className="text-sm font-bold mb-4">Répartition par devise</h2>
               <DonutAllocation slices={currencySlices} />
@@ -684,7 +684,7 @@ export default function WealthAppPage() {
                     </div>
                     <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                       <div
-                        className="h-full bg-[#1E3A8A] dark:bg-sky-500 rounded-full"
+                        className="h-full bg-amber-600 dark:bg-amber-500 rounded-full"
                         style={{ width: `${Math.min(100, pct)}%` }}
                       />
                     </div>
@@ -693,7 +693,8 @@ export default function WealthAppPage() {
               })}
             </section>
 
-            <section className="space-y-2.5">
+            {/* Investissements regroupés dans le même ordre de catégories que la page 1, séparés uniquement par des titres */}
+            <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold">Gérer mes investissements</h2>
                 <button
@@ -702,48 +703,63 @@ export default function WealthAppPage() {
                     setEditingHolding(null);
                     setModalOpen(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0A1628] text-white border border-blue-500/30 text-xs font-semibold"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-semibold"
                 >
                   <Plus className="w-3.5 h-3.5" /> Nouvel actif
                 </button>
               </div>
 
-              {enriched.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl bg-white dark:bg-[#131823] p-3.5 border border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-2"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-bold truncate">{item.name}</p>
-                      {item.liveSource === 'manual' && (
-                        <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                      )}
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold">
-                        {item.currency}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      {item.category} • {item.institution} • PRU{' '}
-                      {item.buyPriceEur.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €
-                    </p>
-                  </div>
+              {groupedByCategory.map((group) => (
+                <div key={group.category} className="space-y-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 px-1 pt-1">
+                    {group.category}
+                  </h3>
+                  <div className="space-y-2">
+                    {group.items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="rounded-2xl bg-white dark:bg-[#131823] p-3.5 border border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-bold truncate">{item.name}</p>
+                            {item.liveSource === 'manual' && (
+                              <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            )}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold">
+                              {item.currency}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400">
+                            {item.institution} • PRU{' '}
+                            {item.buyPriceEur.toLocaleString('fr-FR', {
+                              maximumFractionDigits: 2,
+                            })}{' '}
+                            €
+                          </p>
+                        </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-sm font-bold">
-                      {item.currentValueEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingHolding(item);
-                        setModalOpen(true);
-                      }}
-                      className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-                      aria-label="Modifier"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-sm font-bold">
+                            {item.currentValueEur.toLocaleString('fr-FR', {
+                              maximumFractionDigits: 0,
+                            })}{' '}
+                            €
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingHolding(item);
+                              setModalOpen(true);
+                            }}
+                            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                            aria-label="Modifier"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -764,7 +780,7 @@ export default function WealthAppPage() {
                 type="button"
                 onClick={loadAiNews}
                 disabled={loadingNews}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0A1628] text-white border border-blue-500/30 text-xs font-semibold disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-semibold disabled:opacity-50"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 {loadingNews ? 'Analyse...' : 'Actualiser'}
@@ -782,7 +798,9 @@ export default function WealthAppPage() {
                   className="rounded-2xl bg-white dark:bg-[#131823] p-4 border border-slate-200/70 dark:border-slate-800/80 space-y-1.5"
                 >
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-blue-800 dark:text-sky-400">{n.asset}</span>
+                    <span className="font-bold text-amber-600 dark:text-amber-400">
+                      {n.asset}
+                    </span>
                     <span
                       className={`px-2 py-0.5 rounded-full font-semibold ${
                         n.impact === 'Positif'
@@ -805,18 +823,24 @@ export default function WealthAppPage() {
           </section>
         )}
 
+        {/* Page 4 : chat compact au-dessus de la barre de navigation */}
         {activeTab === 'conseiller' && (
-          <section className="flex flex-col h-[calc(100vh-12rem)]">
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+          <section
+            style={{
+              height: 'calc(100dvh - 11.5rem - env(safe-area-inset-bottom))',
+            }}
+            className="flex flex-col justify-between"
+          >
+            <div className="overflow-y-auto space-y-2.5 pr-1">
               {messages.map((m, idx) => (
                 <div
                   key={idx}
                   className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
+                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
                       m.role === 'user'
-                        ? 'bg-[#0A1628] text-white border border-blue-500/30'
+                        ? 'bg-amber-600 text-white'
                         : 'bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80'
                     }`}
                   >
@@ -825,22 +849,24 @@ export default function WealthAppPage() {
                 </div>
               ))}
               {sendingChat && (
-                <div className="text-xs text-slate-400 italic">Le conseiller analyse votre portefeuille...</div>
+                <div className="text-xs text-slate-400 italic">
+                  Le conseiller analyse votre portefeuille...
+                </div>
               )}
             </div>
 
-            <form onSubmit={handleSendChat} className="mt-3 flex items-center gap-2">
+            <form onSubmit={handleSendChat} className="pt-2.5 flex items-center gap-2 shrink-0">
               <input
                 type="text"
                 placeholder="Ex. Suis-je trop exposé à la tech US ?"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                className="flex-1 rounded-2xl px-4 py-3 text-xs bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 outline-none focus:border-blue-600"
+                className="flex-1 rounded-2xl px-4 py-2.5 text-xs bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 outline-none focus:border-amber-600"
               />
               <button
                 type="submit"
                 disabled={sendingChat}
-                className="p-3 rounded-2xl bg-[#0A1628] text-white border border-blue-500/30 disabled:opacity-50"
+                className="p-2.5 rounded-2xl bg-amber-600 text-white disabled:opacity-50"
                 aria-label="Envoyer"
               >
                 <Send className="w-4 h-4" />
@@ -852,14 +878,14 @@ export default function WealthAppPage() {
 
       <nav
         style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
-        className="fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-[#0D111A]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 pt-2"
+        className="fixed bottom-0 inset-x-0 z-30 bg-white dark:bg-[#0D111A] border-t border-slate-200/80 dark:border-slate-800 px-2 pt-2"
       >
         <div className="max-w-xl mx-auto grid grid-cols-4 gap-1">
           <button
             type="button"
             onClick={() => setActiveTab('synthese')}
             className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
-              activeTab === 'synthese' ? 'text-blue-900 dark:text-sky-400' : 'text-slate-400'
+              activeTab === 'synthese' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'
             }`}
           >
             <LayoutDashboard className="w-5 h-5" />
@@ -870,7 +896,9 @@ export default function WealthAppPage() {
             type="button"
             onClick={() => setActiveTab('portefeuille')}
             className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
-              activeTab === 'portefeuille' ? 'text-blue-900 dark:text-sky-400' : 'text-slate-400'
+              activeTab === 'portefeuille'
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-slate-400'
             }`}
           >
             <PieChart className="w-5 h-5" />
@@ -881,7 +909,7 @@ export default function WealthAppPage() {
             type="button"
             onClick={() => setActiveTab('actus')}
             className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
-              activeTab === 'actus' ? 'text-blue-900 dark:text-sky-400' : 'text-slate-400'
+              activeTab === 'actus' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'
             }`}
           >
             <Newspaper className="w-5 h-5" />
@@ -892,7 +920,9 @@ export default function WealthAppPage() {
             type="button"
             onClick={() => setActiveTab('conseiller')}
             className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
-              activeTab === 'conseiller' ? 'text-blue-900 dark:text-sky-400' : 'text-slate-400'
+              activeTab === 'conseiller'
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-slate-400'
             }`}
           >
             <Bot className="w-5 h-5" />

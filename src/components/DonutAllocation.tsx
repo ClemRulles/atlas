@@ -6,6 +6,8 @@ import { CATEGORY_COLORS } from '@/data/initialPortfolio';
 interface SliceItem {
   label: string;
   valueEur: number;
+  displayValue?: number;
+  unitSymbol?: string;
 }
 
 interface DonutAllocationProps {
@@ -13,8 +15,8 @@ interface DonutAllocationProps {
 }
 
 export default function DonutAllocation({ slices }: DonutAllocationProps) {
-  const total = slices.reduce((sum, s) => sum + Math.max(0, s.valueEur), 0);
-  if (total <= 0) {
+  const totalEur = slices.reduce((sum, s) => sum + Math.max(0, s.valueEur), 0);
+  if (totalEur <= 0) {
     return (
       <div className="py-8 text-center text-sm text-slate-400">
         Ajoutez des actifs pour voir la répartition.
@@ -25,6 +27,11 @@ export default function DonutAllocation({ slices }: DonutAllocationProps) {
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
   let offsetAcc = 0;
+  const firstUnit = slices[0]?.unitSymbol || '€';
+  const totalDisplay = slices.reduce(
+    (sum, s) => sum + Math.max(0, s.displayValue ?? s.valueEur),
+    0
+  );
 
   return (
     <div className="flex flex-col sm:flex-row items-center gap-6">
@@ -40,12 +47,12 @@ export default function DonutAllocation({ slices }: DonutAllocationProps) {
             className="text-slate-200 dark:text-slate-800"
           />
           {slices.map((s) => {
-            const pct = s.valueEur / total;
+            const pct = s.valueEur / totalEur;
             const dash = pct * circumference;
             const strokeDasharray = `${dash} ${circumference}`;
             const strokeDashoffset = -offsetAcc;
             offsetAcc += dash;
-            const color = CATEGORY_COLORS[s.label] || '#6366F1';
+            const color = CATEGORY_COLORS[s.label] || '#EA580C';
 
             return (
               <circle
@@ -63,18 +70,23 @@ export default function DonutAllocation({ slices }: DonutAllocationProps) {
             );
           })}
         </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-1">
           <span className="text-[11px] text-slate-400">Total</span>
           <span className="text-xs font-bold">
-            {total.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €
+            {firstUnit === '$'
+              ? `$${totalDisplay.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}`
+              : `${totalDisplay.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`}
           </span>
         </div>
       </div>
 
       <div className="flex-1 w-full space-y-2">
         {slices.map((s) => {
-          const pct = ((s.valueEur / total) * 100).toFixed(1);
-          const color = CATEGORY_COLORS[s.label] || '#6366F1';
+          const pct = ((s.valueEur / totalEur) * 100).toFixed(1);
+          const color = CATEGORY_COLORS[s.label] || '#EA580C';
+          const unit = s.unitSymbol || '€';
+          const shownVal = s.displayValue ?? s.valueEur;
+
           return (
             <div key={s.label} className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
@@ -86,7 +98,9 @@ export default function DonutAllocation({ slices }: DonutAllocationProps) {
               </div>
               <div className="text-right">
                 <span className="font-semibold">
-                  {s.valueEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €
+                  {unit === '$'
+                    ? `$${shownVal.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}`
+                    : `${shownVal.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`}
                 </span>
                 <span className="text-slate-400 ml-1.5">({pct}%)</span>
               </div>

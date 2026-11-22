@@ -207,13 +207,14 @@ export const INITIAL_HOLDINGS: PortfolioHolding[] = [
   },
 ];
 
+// Palette chaude sans mauve
 export const CATEGORY_COLORS: Record<string, string> = {
-  Actions: '#2563EB',
-  ETF: '#0EA5E9',
-  Fonds: '#8B5CF6',
+  Actions: '#EA580C',
+  ETF: '#D97706',
+  Fonds: '#E11D48',
   Crypto: '#F59E0B',
-  Cash: '#10B981',
-  'Or / Matières premières': '#EAB308',
-  EUR: '#1E3A8A',
-  USD: '#0EA5E9',
+  Cash: '#16A34A',
+  'Or / Matières premières': '#CA8A04',
+  EUR: '#D97706',
+  USD: '#EA580C',
 };
