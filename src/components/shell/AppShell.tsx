@@ -20,6 +20,7 @@ export const PAGES = [
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <AtlasProvider>
+      <ServiceWorker />
       <Aurora />
       <div className="relative z-10 mx-auto w-full max-w-6xl pb-36 pl-[max(20px,env(safe-area-inset-left))] pr-[max(20px,env(safe-area-inset-right))] pt-[calc(14px+env(safe-area-inset-top))] sm:pl-[max(32px,env(safe-area-inset-left))] sm:pr-[max(32px,env(safe-area-inset-right))]">
         <TopBar />
@@ -33,6 +34,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       <ExpensesSheet />
     </AtlasProvider>
   );
+}
+
+/** Enregistre le service worker en production : l'app s'ouvre même hors ligne. */
+function ServiceWorker() {
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
+  }, []);
+  return null;
 }
 
 /** Lumière d'ambiance : sa teinte suit la variation du jour. */
