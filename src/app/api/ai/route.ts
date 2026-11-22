@@ -1,54 +1,200 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+
+interface PortfolioSummaryItem {
+  name?: string;
+  symbol?: string;
+  currency?: string;
+  category?: string;
+  institution?: string;
+  valueEur?: number;
+  pnlPct?: number;
+}
+
+interface ChatMessageInput {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface AiNewsItem {
+  title: string;
+  impact: 'Positif' | 'Neutre' | 'Vigilance';
+  asset: string;
+  summary: string;
+  time: string;
+}
+
+const MODELS_TO_TRY = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+
+async function callGemini(
+  apiKey: string,
+  systemInstruction: string,
+  prompt: string,
+  expectJson = false
+): Promise<string | null> {
+  for (const model of MODELS_TO_TRY) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
+        apiKey
+      )}`;
+
+      const body: Record<string, unknown> = {
+        systemInstruction: {
+          parts: [{ text: systemInstruction }],
+        },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: expectJson ? 0.35 : 0.6,
+          ...(expectJson ? { responseMimeType: 'application/json' } : {}),
+        },
+      };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        cache: 'no-store',
+      });
+
+      if (!res.ok) continue;
+
+      const data = await res.json();
+      const text =
+        data?.candidates?.[0]?.content?.parts
+          ?.map((p: { text?: string }) => p.text || '')
+          .join('')
+          .trim() || '';
+
+      if (text) return text;
+    } catch {
+      // Essaie le modèle suivant
+    }
+  }
+  return null;
+}
+
+function buildFallbackNews(portfolio: PortfolioSummaryItem[]): AiNewsItem[] {
+  const topAssets = portfolio.slice(0, 3);
+  if (topAssets.length === 0) {
+    return [
+      {
+        title: 'Suivi consolidé des marchés actions et ETF',
+        impact: 'Neutre',
+        asset: 'Portefeuille global',
+        summary:
+          'Ajoutez ou vérifiez vos positions pour obtenir des synthèses thématiques ciblées sur vos actifs.',
+        time: 'Aujourd’hui',
+      },
+    ];
+  }
+
+  return topAssets.map((item, idx) => ({
+    title: `Point de vigilance & dynamique sur ${item.name || item.symbol || 'votre position'}`,
+    impact: idx === 0 ? 'Positif' : idx === 1 ? 'Neutre' : 'Vigilance',
+    asset: item.symbol || item.name || item.category || 'Actif',
+    summary: `Position classée en ${item.category || 'Actif'} (${
+      item.currency || 'EUR'
+    }), valorisée autour de €${(item.valueEur || 0).toLocaleString('en-US', {
+      maximumFractionDigits: 0,
+    })} avec une performance latente de ${(item.pnlPct || 0) >= 0 ? '+' : ''}${(
+      item.pnlPct || 0
+    ).toFixed(1)}%. Surveillez la volatilité sectorielle et le taux EUR/USD.`,
+    time: 'Aujourd’hui',
+  }));
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || apiKey.trim().length === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "Clé API Gemini non configurée (variable d'environnement GEMINI_API_KEY manquante sur Vercel ou .env.local). Obtenez une clé gratuite sur Google AI Studio puis ajoutez GEMINI_API_KEY dans les réglages Vercel.",
-        },
-        { status: 400 }
-      );
-    }
-
     const body = await req.json();
     const mode: 'news' | 'advisor' = body?.mode === 'news' ? 'news' : 'advisor';
-    const portfolioSummary = body?.portfolioSummary || '';
-    const prompt: string = body?.prompt || '';
+    const portfolio: PortfolioSummaryItem[] = Array.isArray(body?.portfolio)
+      ? body.portfolio
+      : [];
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const portfolioContext = JSON.stringify(portfolio.slice(0, 25));
 
     if (mode === 'news') {
-      const newsPrompt = `Tu es un analyste financier synthétique en français.
-Voici le portefeuille de l'utilisateur :
-${portfolioSummary}
+      if (!apiKey) {
+        return NextResponse.json({
+          news: buildFallbackNews(portfolio),
+          missingKey: true,
+        });
+      }
 
-Rédige une newsletter / revue d'actualités courte, structurée et impactante (3 à 4 points clés maximum) expliquant les thèmes, secteurs et risques/opportunités qui concernent directement ces positions (actions, ETF, fonds, crypto, cash, matières premières). Termine par une courte note rappelant qu'il s'agit d'une analyse informative et non d'un conseil financier réglementé.`;
+      const rawJson = await callGemini(
+        apiKey,
+        'Tu es un analyste financier synthétique en français. Réponds UNIQUEMENT avec un tableau JSON de 4 objets contenant exactement les clés : title (string), impact ("Positif" | "Neutre" | "Vigilance"), asset (string), summary (string, 2 phrases max), time (string). Pas de conseil d’investissement personnalisé réglementé, reste objectif et clair.',
+        `Génère 4 actualités / analyses pertinentes à partir de ce portefeuille : ${portfolioContext}`,
+        true
+      );
 
-      const result = await model.generateContent(newsPrompt);
-      return NextResponse.json({ text: result.response.text() });
+      if (rawJson) {
+        try {
+          const cleaned = rawJson.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+          const parsed = JSON.parse(cleaned);
+          const list = Array.isArray(parsed) ? parsed : parsed?.news;
+          if (Array.isArray(list) && list.length > 0) {
+            const normalized: AiNewsItem[] = list.slice(0, 6).map((n: Partial<AiNewsItem>) => ({
+              title: String(n.title || 'Actualité marché'),
+              impact:
+                n.impact === 'Positif' || n.impact === 'Vigilance' ? n.impact : 'Neutre',
+              asset: String(n.asset || 'Marchés'),
+              summary: String(n.summary || ''),
+              time: String(n.time || 'Récent'),
+            }));
+            return NextResponse.json({ news: normalized });
+          }
+        } catch {
+          // Repli ci-dessous
+        }
+      }
+
+      return NextResponse.json({ news: buildFallbackNews(portfolio) });
     }
 
-    const advisorPrompt = `Tu es un conseiller financier, boursier et budgétaire pédagogue, pragmatique et lucide, qui répond en français.
-Voici la situation actuelle du portefeuille de l'utilisateur :
-${portfolioSummary}
+    // Mode conseiller
+    const messages: ChatMessageInput[] = Array.isArray(body?.messages) ? body.messages : [];
+    const lastUserMessage =
+      [...messages].reverse().find((m) => m.role === 'user')?.content ||
+      'Analyse mon portefeuille.';
 
-Question ou demande de l'utilisateur :
-${prompt}
+    if (!apiKey) {
+      return NextResponse.json({
+        reply:
+          'La clé GEMINI_API_KEY n’est pas encore configurée sur Vercel. Ajoutez-la dans Settings → Environment Variables puis relancez un déploiement pour activer les réponses IA en direct.',
+        missingKey: true,
+      });
+    }
 
-Donne une réponse claire, structurée et actionnable adaptée à son portefeuille réel, en mentionnant les points de vigilance (diversification, concentration, frais, horizon, budget).`;
+    const conversationHistory = messages
+      .slice(-8)
+      .map((m) => `${m.role === 'user' ? 'Utilisateur' : 'Conseiller'}: ${m.content}`)
+      .join('\n');
 
-    const result = await model.generateContent(advisorPrompt);
-    return NextResponse.json({ text: result.response.text() });
-  } catch (err) {
-    const message =
-      err instanceof Error
-        ? err.message
-        : "Impossible de contacter l'API Gemini (vérifiez votre quota ou votre clé GEMINI_API_KEY).";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const reply = await callGemini(
+      apiKey,
+      `Tu es un assistant d’analyse patrimoniale pédagogue, structuré et concis en français. Tu analyses le portefeuille de l’utilisateur (valeurs consolidées en EUR, devises d’origine EUR/USD, catégories et établissements). Sois précis avec les chiffres fournis, signale les concentrations ou expositions de change, et rappelle brièvement que cela reste informatif. Portefeuille actuel : ${portfolioContext}`,
+      `Historique récent :\n${conversationHistory}\n\nQuestion de l'utilisateur : ${lastUserMessage}`,
+      false
+    );
+
+    return NextResponse.json({
+      reply:
+        reply ||
+        'Je n’ai pas pu générer de réponse pour le moment. Réessayez dans quelques instants.',
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        reply: 'Une erreur est survenue côté serveur lors de l’appel à Gemini.',
+        news: [],
+      },
+      { status: 200 }
+    );
   }
 }
