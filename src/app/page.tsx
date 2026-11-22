@@ -166,7 +166,7 @@ export default function WealthAppPage() {
     [holdings, quotes, timeframe, clientNow]
   );
 
-  const series = useMemo(() => buildPortfolioSeries(enriched, timeframe, clientNow), [enriched, timeframe, clientNow]);
+  const series = useMemo(() => buildPortfolioSeries(enriched), [enriched]);
 
   const totalValueEur = useMemo(
     () => enriched.reduce((sum, h) => sum + h.currentValueEur, 0),
@@ -462,7 +462,7 @@ export default function WealthAppPage() {
                     : 'Valeur totale du portefeuille'}
                 </span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-600/15 text-blue-700 dark:text-blue-400 font-semibold">
-                  {holdings.length} actifs
+                  {enriched.filter((h) => h.liveSource === 'yahoo').length}/{enriched.length} actifs
                 </span>
               </div>
 

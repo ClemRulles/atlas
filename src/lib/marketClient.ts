@@ -44,56 +44,31 @@ export function getStartDateForTimeframe(
   }
 }
 
-function buildFallbackQuote(
+// Repli sans historique synthétique : uniquement valeur actuelle connue (pas de courbe inventée)
+function buildManualQuoteWithoutHistory(
   holding: PortfolioHolding,
   refDate: Date,
   forcedSource: 'yahoo' | 'manual' = 'manual',
-  overrideEndPrice?: number
+  overridePriceEur?: number
 ): MarketQuoteResult {
-  const endPrice =
-    overrideEndPrice && overrideEndPrice > 0
-      ? overrideEndPrice
+  const priceEur =
+    overridePriceEur && overridePriceEur > 0
+      ? overridePriceEur
       : holding.manualCurrentPriceEur && holding.manualCurrentPriceEur > 0
       ? holding.manualCurrentPriceEur
       : holding.buyPriceEur > 0
       ? holding.buyPriceEur
-      : 100;
-
-  const startPrice = holding.buyPriceEur > 0 ? holding.buyPriceEur : endPrice;
-  const isCash = holding.category === 'Cash';
-  const points: { date: string; priceEur: number }[] = [];
-  const steps = 160;
-  const now = new Date(refDate);
-
-  const buyDt = new Date(holding.buyDate);
-  const originDt = Number.isNaN(buyDt.getTime())
-    ? new Date(now.getFullYear() - 5, 0, 1)
-    : buyDt;
-  const totalMs = Math.max(24 * 3600 * 1000, now.getTime() - originDt.getTime());
-
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const dt = new Date(originDt.getTime() + t * totalMs);
-    let price = endPrice;
-    if (!isCash) {
-      const trend = startPrice + (endPrice - startPrice) * t;
-      const oscillation = Math.sin(t * Math.PI * 10) * (endPrice * 0.015) * (1 - t);
-      price = i === steps ? endPrice : Math.max(0.01, trend + oscillation);
-    }
-    points.push({
-      date: dt.toISOString().slice(0, 10),
-      priceEur: Number(price.toFixed(4)),
-    });
-  }
-
-  const prevPrice = points.length > 1 ? points[points.length - 2].priceEur : endPrice;
+      : 0;
 
   return {
     symbol: holding.symbol || holding.name,
     currency: holding.currency || 'EUR',
-    priceEur: endPrice,
-    previousCloseEur: prevPrice,
-    history: points,
+    priceEur,
+    previousCloseEur: priceEur,
+    history:
+      priceEur > 0
+        ? [{ date: refDate.toISOString().slice(0, 10), priceEur }]
+        : [],
     source: forcedSource,
   };
 }
@@ -143,7 +118,7 @@ export async function fetchQuotesForHoldings(
 
   for (const h of holdings) {
     if (h.category === 'Cash') {
-      result[h.id] = buildFallbackQuote(h, refDate, 'manual');
+      result[h.id] = buildManualQuoteWithoutHistory(h, refDate, 'manual');
       continue;
     }
 
@@ -152,25 +127,23 @@ export async function fetchQuotesForHoldings(
     const prevKnown = updatedLiveStatus[h.id];
 
     if (live && live.priceEur > 0) {
-      updatedLiveStatus[h.id] = { isLive: true, lastPriceEur: live.priceEur };
-      if (live.history && live.history.length >= 2) {
-        result[h.id] = {
-          ...live,
-          currency: (h.currency || live.currency || 'EUR') as AssetCurrency,
-          source: 'yahoo',
-        };
-      } else {
-        result[h.id] = buildFallbackQuote(h, refDate, 'yahoo', live.priceEur);
-      }
-    } else if (prevKnown?.isLive) {
-      result[h.id] = buildFallbackQuote(
+      const hasRealHistory = Array.isArray(live.history) && live.history.length >= 2;
+      updatedLiveStatus[h.id] = { isLive: hasRealHistory, lastPriceEur: live.priceEur };
+      result[h.id] = {
+        ...live,
+        currency: (h.currency || live.currency || 'EUR') as AssetCurrency,
+        history: hasRealHistory ? live.history : [],
+        source: hasRealHistory ? 'yahoo' : 'manual',
+      };
+    } else if (prevKnown?.isLive && prevKnown.lastPriceEur) {
+      result[h.id] = buildManualQuoteWithoutHistory(
         h,
         refDate,
         'yahoo',
         prevKnown.lastPriceEur
       );
     } else {
-      result[h.id] = buildFallbackQuote(h, refDate, 'manual');
+      result[h.id] = buildManualQuoteWithoutHistory(h, refDate, 'manual');
     }
   }
 
@@ -192,7 +165,7 @@ export function enrichHoldings(
   const startDate = getStartDateForTimeframe(timeframe, earliestBuy, refDate);
 
   return holdings.map((h) => {
-    const q = quotes[h.id] || buildFallbackQuote(h, refDate, 'manual');
+    const q = quotes[h.id] || buildManualQuoteWithoutHistory(h, refDate, 'manual');
     const currency: AssetCurrency = h.currency || q.currency || 'EUR';
     const currentPriceEur = q.priceEur;
     const currentValueEur = currentPriceEur * h.quantity;
@@ -200,27 +173,22 @@ export function enrichHoldings(
     const pnlEur = currentValueEur - costBasisEur;
     const pnlPercent = costBasisEur > 0 ? (pnlEur / costBasisEur) * 100 : 0;
 
-    const filteredHistory = q.history.filter((pt) => new Date(pt.date) >= startDate);
-    const effectiveHistory = filteredHistory.length >= 2 ? filteredHistory : q.history;
-    const basePoint =
-      effectiveHistory.length > 0 ? effectiveHistory[0].priceEur * h.quantity : currentValueEur;
-
-    const periodChangeEur = currentValueEur - basePoint;
-    const periodChangePercent = basePoint > 0 ? (periodChangeEur / basePoint) * 100 : 0;
+    const rawHistory = q.source === 'yahoo' && Array.isArray(q.history) ? q.history : [];
+    const filteredHistory = rawHistory.filter((pt) => new Date(pt.date) >= startDate);
+    const activeHistory = filteredHistory.length >= 2 ? filteredHistory : rawHistory;
 
     const history =
-      effectiveHistory.length >= 2
-        ? effectiveHistory.map((pt) => ({
+      activeHistory.length >= 2
+        ? activeHistory.map((pt) => ({
             date: pt.date,
             valueEur: Number((pt.priceEur * h.quantity).toFixed(2)),
           }))
-        : [
-            {
-              date: startDate.toISOString().slice(0, 10),
-              valueEur: Number(basePoint.toFixed(2)),
-            },
-            { date: fallbackDateStr, valueEur: Number(currentValueEur.toFixed(2)) },
-          ];
+        : [];
+
+    const basePoint = history.length >= 2 ? history[0].valueEur : currentValueEur;
+    const periodChangeEur = history.length >= 2 ? currentValueEur - basePoint : 0;
+    const periodChangePercent =
+      history.length >= 2 && basePoint > 0 ? (periodChangeEur / basePoint) * 100 : 0;
 
     return {
       ...h,
@@ -233,89 +201,51 @@ export function enrichHoldings(
       periodChangeEur,
       periodChangePercent,
       history,
-      liveSource: q.source,
+      liveSource: history.length >= 2 && q.source === 'yahoo' ? 'yahoo' : 'manual',
     };
   });
 }
 
-function interpolateValueAtTimestamp(
-  parsedPoints: { ts: number; valueEur: number }[],
-  targetTs: number,
-  fallbackVal: number
-): number {
-  if (parsedPoints.length === 0) return fallbackVal;
-  if (targetTs <= parsedPoints[0].ts) return parsedPoints[0].valueEur;
-  const last = parsedPoints[parsedPoints.length - 1];
-  if (targetTs >= last.ts) return last.valueEur;
-
-  for (let i = 0; i < parsedPoints.length - 1; i++) {
-    const p0 = parsedPoints[i];
-    const p1 = parsedPoints[i + 1];
-    if (targetTs >= p0.ts && targetTs <= p1.ts) {
-      const span = p1.ts - p0.ts;
-      if (span <= 0) return p1.valueEur;
-      const ratio = (targetTs - p0.ts) / span;
-      return p0.valueEur + (p1.valueEur - p0.valueEur) * ratio;
-    }
-  }
-  return last.valueEur;
-}
-
-export function buildPortfolioSeries(
-  enriched: EnrichedHolding[],
-  timeframe: TimeframeKey = 'LTM',
-  refDate: Date = new Date('2026-11-22T00:00:00Z')
-) {
-  if (enriched.length === 0) {
-    return [{ date: '2026-11-22', valueEur: 0 }];
-  }
-
-  const fallbackDateStr = refDate.toISOString().slice(0, 10);
-  const earliestBuy = enriched.reduce(
-    (min, h) => (h.buyDate < min ? h.buyDate : min),
-    enriched[0].buyDate || fallbackDateStr
+// Construit la courbe uniquement à partir de la somme des données historiques réelles disponibles
+export function buildPortfolioSeries(enriched: EnrichedHolding[]) {
+  const holdingsWithHistory = enriched.filter(
+    (item) => item.liveSource === 'yahoo' && Array.isArray(item.history) && item.history.length >= 2
   );
 
-  const startDt = getStartDateForTimeframe(timeframe, earliestBuy, refDate);
-  const endDt = new Date(refDate);
-  const startTs = startDt.getTime();
-  const endTs = Math.max(startTs + 3600 * 1000, endDt.getTime());
-
-  const steps = 90;
-
-  const preparedHoldings = enriched.map((item) => {
-    const parsed = item.history
-      .map((pt) => {
-        const ts = new Date(pt.date.slice(0, 10) + 'T00:00:00Z').getTime();
-        return Number.isNaN(ts) ? null : { ts, valueEur: pt.valueEur };
-      })
-      .filter(Boolean) as { ts: number; valueEur: number }[];
-    parsed.sort((a, b) => a.ts - b.ts);
-    return { item, parsed };
-  });
-
-  const series: { date: string; valueEur: number }[] = [];
-
-  for (let i = 0; i <= steps; i++) {
-    const ratio = i / steps;
-    const ts = startTs + ratio * (endTs - startTs);
-    const dt = new Date(ts);
-    const label = dt.toISOString().slice(0, 10);
-
-    let total = 0;
-    for (const { item, parsed } of preparedHoldings) {
-      if (i === steps) {
-        total += item.currentValueEur;
-      } else {
-        total += interpolateValueAtTimestamp(parsed, ts, item.currentValueEur);
-      }
-    }
-
-    series.push({
-      date: label,
-      valueEur: Number(total.toFixed(2)),
-    });
+  if (holdingsWithHistory.length === 0) {
+    return [];
   }
 
-  return series;
+  const allDatesSet = new Set<string>();
+  for (const item of holdingsWithHistory) {
+    for (const pt of item.history) {
+      allDatesSet.add(pt.date);
+    }
+  }
+
+  const sortedDates = Array.from(allDatesSet).sort();
+  if (sortedDates.length < 2) {
+    return [];
+  }
+
+  // Grille commune basée uniquement sur les dates historiques existantes
+  const lastKnownByHolding = new Map<string, number>();
+
+  return sortedDates.map((date) => {
+    let totalOnDate = 0;
+    for (const item of holdingsWithHistory) {
+      const exactOrEarlier = item.history.filter((p) => p.date <= date);
+      if (exactOrEarlier.length > 0) {
+        const val = exactOrEarlier[exactOrEarlier.length - 1].valueEur;
+        lastKnownByHolding.set(item.id, val);
+        totalOnDate += val;
+      } else if (lastKnownByHolding.has(item.id)) {
+        totalOnDate += lastKnownByHolding.get(item.id)!;
+      }
+    }
+    return {
+      date,
+      valueEur: Number(totalOnDate.toFixed(2)),
+    };
+  });
 }
