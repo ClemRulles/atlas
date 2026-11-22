@@ -16,7 +16,7 @@ Trois pages, trois questions :
 |---|---|---|
 | 1 | Direction artistique, structure, navigation, mode démo | Fait : direction « Nuit boréale » validée, trois pages en mode démo, navigation, mode discret |
 | 2 | Saisie des positions, cours réels, graphe d'évolution | Fait : recherche par nom/ticker/ISIN, achat et vente, import CSV, cours Yahoo, courbe réelle, dépenses, sauvegarde JSON |
-| 3 | Composition des ETF, page « Ce que tu possèdes » | À faire |
+| 3 | Composition des ETF, page « Ce que tu possèdes » | Fait : compositions (Yahoo par défaut, Eulerpool/FMP/Finnhub en option), ETF traversés dans la phrase du jour, actualités et dates de résultats |
 | 4 | Laboratoire « Et si » | À faire |
 | 5 | IA : phrase du jour, chat, import par capture d'écran | À faire |
 | 6 | PWA, finitions, déploiement Vercel | À faire |
@@ -42,7 +42,7 @@ Aucune n'est nécessaire pour les phases 1 et 2 : le mode démo est entièrement
 
 | Variable | Phase | Rôle |
 |---|---|---|
-| `HOLDINGS_PROVIDER` | 3 | Fournisseur de composition des ETF : `eulerpool` (défaut), `fmp` ou `finnhub` |
+| `HOLDINGS_PROVIDER` | 3 | Fournisseur principal de composition : `yahoo`, `eulerpool`, `fmp` ou `finnhub`. Sans réglage : Eulerpool si sa clé est présente, sinon Yahoo |
 | `EULERPOOL_API_KEY` | 3 | Clé Eulerpool (offre gratuite, usage non commercial) |
 | `FMP_API_KEY` | 3 | Clé Financial Modeling Prep, si ce fournisseur est choisi |
 | `FINNHUB_API_KEY` | 3 | Clé Finnhub, si ce fournisseur est choisi |
@@ -66,15 +66,26 @@ Atlas n'utilise aucune clé d'IA :
 
 ## Composition des ETF : choix du fournisseur
 
-Documentation lue le 15 novembre 2026.
+Documentation relue en novembre 2026. Tous passent par l'interface `HoldingsProvider` (`src/lib/holdings/providers.ts`) ; la normalisation (poids en ratios, secteurs et pays en français) est commune et testée.
 
-| Fournisseur | Composition d'ETF | Coût | Recherche par ISIN |
+| Fournisseur | Ce qu'il donne | Coût | Rôle dans Atlas |
 |---|---|---|---|
-| **Eulerpool** (retenu) | Lignes, secteurs, pays, profil avec frais courants | Gratuit jusqu'à 100 000 requêtes par mois, usage non commercial | Oui |
-| FMP | Lignes, secteurs, pays | Plan Ultimate, 139 $ par mois (99 $ en annuel) | Par symbole |
-| Finnhub | Lignes, secteurs, pays, profil | Marqué « Premium », absent de l'offre gratuite | Oui |
+| **Yahoo** | Top 10 des lignes, secteurs, frais courants, rendement bénéficiaire. Pas de pays | Gratuit, sans clé | Par défaut, et complète toujours les trous des autres |
+| **Eulerpool** | Lignes complètes, secteurs, pays, frais ; recherche par ISIN | Gratuit avec clé (100 000 requêtes par mois, usage non commercial) | Recommandé : il suffit d'ajouter `EULERPOOL_API_KEY` |
+| FMP | Lignes, secteurs, pays, frais, nombre de lignes | Plan Ultimate, 139 $ par mois | Prêt, non activé (payant) |
+| Finnhub | Lignes, secteurs, pays, profil (frais, PER) | Module ETF « Premium » | Prêt, non activé (payant) |
 
-Points à vérifier avec une vraie clé en phase 3 : la documentation Eulerpool parle des « top holdings » (la liste est peut-être partielle), et la qualité de couverture des ETF UCITS européens n'est pas documentée. Le modèle de données prévoit déjà les compositions partielles : ce qui n'est pas détaillé est affiché comme tel, jamais estimé.
+**Retenu : Yahoo par défaut, parce que l'app ne doit rien coûter et fonctionner sans aucune clé.** Sa limite est assumée et affichée : seules les dix premières lignes de chaque fonds sont connues (Atlas écrit « au moins N entreprises identifiées » et montre la part « non publiée »), et les pays manquent. Une clé Eulerpool gratuite lève ces deux limites sans autre changement. Les connecteurs FMP et Finnhub suivent leur documentation mais n'ont pas pu être essayés sans abonnement.
+
+Points à vérifier avec une vraie clé Eulerpool : la couverture des ETF européens et l'échelle des poids (la normalisation accepte ratios et pourcentages).
+
+**Ce que la page fait des compositions :**
+
+- Les entreprises sont fusionnées entre fonds par ISIN, sinon par ticker connu, sinon par nom nettoyé (« Alphabet Inc Class A » et « Class C » ne font qu'une).
+- La phrase du jour va chercher le cours des douze plus grosses entreprises tenues via les fonds, pour dire qui a fait la journée.
+- La répartition par devise est déduite des pays (approximation assumée : la devise principale du pays de chaque entreprise).
+- Un rendement en dividendes inconnu n'est jamais compté comme zéro.
+- Fiche entreprise : actualités récentes de Yahoo (titre et source, deux lignes au plus, sans résumé généré) et date des prochains résultats quand elle est annoncée.
 
 ## Reprise de WealthView
 
@@ -98,6 +109,8 @@ Toutes les requêtes passent par les routes serveur de l'app, jamais du navigate
 | `GET /api/search?q=` | Recherche par nom, ticker ou ISIN ; pour un ISIN, ajoute les autres places du même produit | 1 jour |
 | `GET /api/history?symbol=&from=` | Clôtures quotidiennes, devise, place ; pence ramenés en livres | 15 min |
 | `GET /api/profile?symbol=` | Secteur et pays d'une action, rendement bénéficiaire et dividende, frais d'un fonds | 7 jours |
+| `GET /api/composition?symbol=&isin=&id=` | Composition d'un ETF ou d'un fonds, ou `null` | 7 jours |
+| `GET /api/company?symbol=` | Actualités récentes et dates de résultats d'une entreprise | 1 heure |
 
 Les cours sont différés d'environ 15 minutes et l'app l'affiche. Les taux de change viennent de Yahoo (`EURUSD=X` = dollars pour 1 euro). Une ligne est identifiée par sa cotation (IWDA.AS et IWDA.L sont deux lignes : même ISIN, devises différentes).
 
@@ -125,6 +138,7 @@ src/lib/user-data.ts    Positions saisies, réglages, cache des cours, sauvegard
 src/lib/csv.ts          Lecture tolérante des exports CSV de courtiers
 src/lib/market-format.ts  Devises en centimes, dates par fuseau, ISIN, noms lisibles
 src/lib/server/yahoo.ts Accès Yahoo Finance côté serveur, avec cache mémoire
+src/lib/holdings/       Fournisseurs de composition (HoldingsProvider), normalisation, choix du fournisseur
 src/lib/db.ts           Persistance IndexedDB
 src/app/api/            Routes serveur : recherche, historiques, profils
 src/lib/demo/           Portefeuille de démonstration fictif et déterministe

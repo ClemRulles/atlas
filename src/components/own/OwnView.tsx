@@ -10,6 +10,7 @@ import type { Snapshot } from "@/lib/analysis";
 import type { Axis, Breakdown, CompanyExposure } from "@/lib/domain/lookthrough";
 import type { Instrument } from "@/lib/domain/types";
 import { formatEUR, formatNumber, formatPct } from "@/lib/format";
+import { fetchCompanyInfo, type CompanyInfo } from "@/lib/market-client";
 import { useAtlas } from "@/lib/store";
 import { haptic, SERIES_COLORS } from "@/lib/ui";
 
@@ -26,7 +27,7 @@ export function OwnView() {
   return (
     <div className="flex flex-col gap-12">
       <Reveal>
-        <Hero snapshot={snapshot} instruments={instruments} />
+        <Hero snapshot={snapshot} instruments={instruments} counted={Object.values(data.compositions).some((c) => c?.holdingsCount)} />
       </Reveal>
       <div className="grid gap-8 lg:grid-cols-2">
         <Reveal i={1}>
@@ -52,7 +53,7 @@ export function OwnView() {
   );
 }
 
-function Hero({ snapshot, instruments }: { snapshot: Snapshot; instruments: Record<string, Instrument> }) {
+function Hero({ snapshot, instruments, counted }: { snapshot: Snapshot; instruments: Record<string, Instrument>; counted: boolean }) {
   const e = snapshot.exposure;
   const share = (v: number) => (e.totalEUR > 0 ? v / e.totalEUR : 0);
   const parts = [
@@ -72,7 +73,7 @@ function Hero({ snapshot, instruments }: { snapshot: Snapshot; instruments: Reco
             "Ce qu'elles contiennent arrive bientôt."
           ) : (
             <>
-              Tu possèdes au moins <span className="font-sans not-italic font-medium tracking-[-0.04em] text-craie tabular">{formatNumber(e.minCompanies)}</span> entreprises.
+              Tu possèdes au moins <span className="font-sans not-italic font-medium tracking-[-0.04em] text-craie tabular">{formatNumber(e.minCompanies)}</span> entreprises{counted ? "" : " identifiées"}.
             </>
           )}
         </em>
@@ -98,6 +99,9 @@ function Hero({ snapshot, instruments }: { snapshot: Snapshot; instruments: Reco
             </li>
           ))}
         </ul>
+        {!counted && !blind && (
+          <p className="text-[13.5px] text-ombre">La source gratuite actuelle ne publie que les dix premières lignes de chaque fonds : le vrai nombre d&apos;entreprises est bien plus grand, et la part « non publiée » le montre.</p>
+        )}
         {e.unavailable.length > 0 && (
           <p className="text-[13.5px] text-ombre">
             {e.unavailable.map((id) => instruments[id]?.name).join(", ")} : composition indisponible. Ces montants ne sont pas répartis, ils ne sont pas devinés non plus.
@@ -169,7 +173,9 @@ function TopCompanies({ snapshot, instruments, onSelect }: { snapshot: Snapshot;
 
 function ProfitsCard({ snapshot, instruments }: { snapshot: Snapshot; instruments: Record<string, Instrument> }) {
   const e = snapshot.earnings;
-  const divShare = e.profitsEUR > 0 ? Math.max(0, e.dividendsEUR / e.profitsEUR) : 0;
+  const divShare = e.splitProfitsEUR > 0 ? Math.max(0, e.dividendsEUR / e.splitProfitsEUR) : 0;
+  const splitKnown = e.splitProfitsEUR > 0;
+  const partialSplit = splitKnown && e.splitProfitsEUR < e.profitsEUR - 0.5;
   if (e.coveredEUR === 0) {
     return (
       <Card className="flex flex-col gap-3">
@@ -185,6 +191,8 @@ function ProfitsCard({ snapshot, instruments }: { snapshot: Snapshot; instrument
       <p className="font-serif text-[23px] leading-[1.22] font-[350] text-balance">
         Les entreprises que tu possèdes gagnent <Money value={e.profitsEUR} className="font-sans text-[0.9em] font-medium tracking-[-0.02em]" /> pour toi chaque année.
       </p>
+      {splitKnown ? (
+      <>
       <div className="flex h-3 gap-[2px] overflow-hidden rounded-full" role="img" aria-label="Part versée en dividendes et part réinvestie">
         <motion.i className="block h-full rounded-[3px] bg-white" initial={{ flexGrow: 0 }} animate={{ flexGrow: divShare }} style={{ flexBasis: 0 }} transition={{ duration: 1.1, ease, delay: 0.4 }} />
         <motion.i className="block h-full rounded-[3px] bg-lavande" initial={{ flexGrow: 0 }} animate={{ flexGrow: 1 - divShare }} style={{ flexBasis: 0 }} transition={{ duration: 1.1, ease, delay: 0.5 }} />
@@ -199,6 +207,11 @@ function ProfitsCard({ snapshot, instruments }: { snapshot: Snapshot; instrument
           <dd className="mt-1 text-[17px]"><Money value={e.reinvestedEUR} /></dd>
         </div>
       </dl>
+      {partialSplit && <p className="text-[13px] text-brume">Séparation connue pour <Money value={e.splitProfitsEUR} /> de ces bénéfices ; le rendement en dividendes des autres lignes est inconnu.</p>}
+      </>
+      ) : (
+        <p className="text-[14px] text-brume">La part versée en dividendes est inconnue pour ces lignes : Atlas ne la devine pas.</p>
+      )}
       <p className="text-[13px] text-ombre">
         Ta part des profits : valeur de chaque ligne × son rendement bénéficiaire.
         {e.unknown.length > 0 && ` Inconnu pour ${e.unknown.map((id) => instruments[id]?.name).join(", ")}, non compté.`}
@@ -217,10 +230,16 @@ function GlobeCard({ snapshot }: { snapshot: Snapshot }) {
     return () => clearInterval(id);
   }, []);
   const open = now ? openExchanges(now) : [];
+  const known = snapshot.breakdowns.country.slices.reduce((s, c) => s + c.weight, 0);
   return (
     <Card className="flex flex-col gap-4">
       <Eyebrow right={open.length ? `${open.length} places ouvertes` : "Places fermées"}>Où travaille ton argent</Eyebrow>
       <Globe countries={countries} size={300} />
+      {known < 0.5 && (
+        <p className="text-[13px] text-brume">
+          Pays connus pour {formatPct(known, { decimals: 0 })} de ton patrimoine seulement. Yahoo ne donne pas les pays des ETF ; une clé Eulerpool gratuite les ajoute.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-brume">
         <span className="flex items-center gap-2"><i className="block h-2 w-2 rounded-full bg-[#9ea3ff]" />Ton argent, par pays</span>
         <span className="flex items-center gap-2"><i className="block h-2 w-2 rounded-full bg-[#ffdb8c]" />Place ouverte</span>
@@ -398,7 +417,7 @@ function CompanySheet({ company, instruments, onClose }: { company: CompanyExpos
       {company && (
         <div className="flex flex-col gap-6">
           <div>
-            <span className="repere">{company.key.startsWith("symbol:") || company.key.startsWith("name:") ? "Entreprise" : company.key}</span>
+            <span className="repere">{[company.isin, company.symbol].filter(Boolean).join(" · ") || "Entreprise"}</span>
             <h2 className="mt-1 font-serif text-[32px] leading-tight">{company.name}</h2>
           </div>
           <div className="flex items-end gap-6">
@@ -425,19 +444,73 @@ function CompanySheet({ company, instruments, onClose }: { company: CompanyExpos
               </div>
             ))}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.03] p-4">
-              <span className="repere">Actualités récentes</span>
-              <p className="mt-2 text-[13.5px] text-brume">Arrivent avec les données réelles, résumées en deux lignes.</p>
-            </div>
-            <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.03] p-4">
-              <span className="repere">Prochains résultats</span>
-              <p className="mt-2 text-[13.5px] text-brume">Date indisponible en démo.</p>
-            </div>
-          </div>
-          <p className="text-[12.5px] text-ombre">{formatEUR(company.valueEUR)} au total, en additionnant chaque produit × le poids de l&apos;entreprise dans ce produit.</p>
+          <CompanyNews key={company.key} symbol={company.symbol} name={company.name} />
+          <p className="text-[12.5px] text-ombre">{formatEUR(company.valueEUR)} au total : chaque produit × le poids de l&apos;entreprise dans ce produit.</p>
         </div>
       )}
     </Sheet>
+  );
+}
+
+const longDate = (d: string) => new Intl.DateTimeFormat("fr-BE", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${d}T12:00:00Z`));
+
+function ago(iso: string): string {
+  const hours = Math.round((Date.now() - Date.parse(iso)) / 3_600_000);
+  if (hours < 1) return "à l'instant";
+  if (hours < 24) return `il y a ${hours} h`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "hier" : `il y a ${days} jours`;
+}
+
+/** Actualités récentes (titre et source, deux lignes au plus) et dates de résultats, depuis Yahoo. */
+function CompanyNews({ symbol, name }: { symbol?: string; name: string }) {
+  const [info, setInfo] = useState<CompanyInfo | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!symbol) return;
+    const controller = new AbortController();
+    fetchCompanyInfo(symbol, controller.signal)
+      .then(setInfo)
+      .catch(() => !controller.signal.aborted && setFailed(true));
+    return () => controller.abort();
+  }, [symbol]);
+
+  if (!symbol) {
+    return <p className="rounded-[18px] border border-white/[0.07] bg-white/[0.03] p-4 text-[13.5px] text-brume">Pas de ticker connu pour {name} : actualités et résultats indisponibles.</p>;
+  }
+  return (
+    <div className="grid gap-3 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="flex flex-col gap-3 rounded-[18px] border border-white/[0.07] bg-white/[0.03] p-4">
+        <span className="repere">Actualités récentes</span>
+        {!info && !failed && [0, 1].map((i) => <div key={i} className="silhouette h-10" />)}
+        {failed && <p className="text-[13.5px] text-brume">Actualités indisponibles pour le moment.</p>}
+        {info && info.news.length === 0 && <p className="text-[13.5px] text-brume">Pas d&apos;actualité récente centrée sur {name}.</p>}
+        {info?.news.map((n) => (
+          <a key={n.title} href={n.link ?? undefined} target="_blank" rel="noopener noreferrer" className="group flex flex-col gap-1">
+            <span className="line-clamp-2 text-[14px] leading-snug group-hover:underline">{n.title}</span>
+            <span className="text-[12px] text-ombre">{[n.publisher, n.publishedAt && ago(n.publishedAt)].filter(Boolean).join(" · ")}</span>
+          </a>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2 rounded-[18px] border border-white/[0.07] bg-white/[0.03] p-4">
+        <span className="repere">Prochains résultats</span>
+        {!info && !failed && <div className="silhouette h-10" />}
+        {info && (
+          <p className="text-[14px] leading-snug">
+            {info.nextEarnings ? (
+              <>
+                {longDate(info.nextEarnings)}
+                {info.earningsEstimated && <span className="text-ombre"> (date estimée)</span>}
+              </>
+            ) : (
+              <span className="text-brume">
+                Pas encore annoncés.{info.lastEarnings && ` Dernière publication le ${longDate(info.lastEarnings)}.`}
+              </span>
+            )}
+          </p>
+        )}
+        {failed && <p className="text-[13.5px] text-brume">Date indisponible.</p>}
+      </div>
+    </div>
   );
 }

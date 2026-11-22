@@ -1,6 +1,6 @@
 /** Appels de l'app vers nos routes serveur (jamais directement vers les fournisseurs). */
 
-import type { AssetType, PricePoint } from "@/lib/domain/types";
+import type { AssetType, FundComposition, Instrument, PricePoint } from "@/lib/domain/types";
 import type { CachedSeries, MarketCache, SeriesNeed } from "@/lib/user-data";
 
 export interface SearchResult {
@@ -77,4 +77,24 @@ export async function refreshSeries(needs: SeriesNeed[], cache: MarketCache): Pr
   };
   await Promise.all(Array.from({ length: Math.min(4, needs.length) }, worker));
   return { cache: next, failed };
+}
+
+/** Composition d'un fonds, ou `null` si aucun fournisseur ne la connaît. Lève une erreur si le réseau échoue. */
+export async function fetchComposition(instrument: Instrument): Promise<FundComposition | null> {
+  const params = new URLSearchParams({ symbol: instrument.symbol, id: instrument.id });
+  if (instrument.isin) params.set("isin", instrument.isin);
+  const { composition } = await getJson<{ composition: FundComposition | null }>(`/api/composition?${params}`);
+  return composition;
+}
+
+export interface CompanyInfo {
+  symbol: string;
+  news: { title: string; publisher: string | null; publishedAt: string | null; link: string | null }[];
+  nextEarnings: string | null;
+  lastEarnings: string | null;
+  earningsEstimated: boolean;
+}
+
+export function fetchCompanyInfo(symbol: string, signal?: AbortSignal): Promise<CompanyInfo> {
+  return getJson<CompanyInfo>(`/api/company?symbol=${encodeURIComponent(symbol)}`, signal);
 }

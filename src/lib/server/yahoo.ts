@@ -134,3 +134,57 @@ export function profile(symbol: string): Promise<Profile> {
     };
   });
 }
+
+export interface NewsItem {
+  title: string;
+  publisher: string | null;
+  publishedAt: string | null;
+  link: string | null;
+}
+
+export interface CompanyInfo {
+  symbol: string;
+  news: NewsItem[];
+  /** Prochaine publication de résultats annoncée (AAAA-MM-JJ), sinon la dernière connue. */
+  nextEarnings: string | null;
+  lastEarnings: string | null;
+  earningsEstimated: boolean;
+}
+
+interface YahooNews {
+  title?: string;
+  publisher?: string;
+  providerPublishTime?: Date | number | string;
+  link?: string;
+  relatedTickers?: string[];
+}
+
+/** Actualités propres à l'entreprise (citée dans l'article) et dates de résultats. */
+export function companyInfo(symbol: string, today: string): Promise<CompanyInfo> {
+  return cached(`company:${symbol}:${today}`, 3 * 3600_000, async () => {
+    const [search, summary] = await Promise.all([
+      // Les actualités sont rattachées à l'entreprise, pas à une place : on cherche par la racine du ticker.
+      yf.search(symbol.split(".")[0], { quotesCount: 0, newsCount: 12 }).catch(() => ({ news: [] as YahooNews[] })),
+      yf.quoteSummary(symbol, { modules: ["calendarEvents"] }).catch(() => null),
+    ]);
+    const root = symbol.split(".")[0].toUpperCase();
+    const matches = (t: string) => t.toUpperCase() === symbol.toUpperCase() || t.toUpperCase().split(".")[0] === root;
+    const news = (search.news as YahooNews[])
+      // Yahoo mêle des actualités de marché : on garde celles où l'entreprise fait partie des trois titres cités en premier,
+      // les plus centrées sur elle d'abord (moins de titres cités).
+      .filter((n) => n.title && (n.relatedTickers ?? []).slice(0, 3).some(matches))
+      .sort((a, b) => (a.relatedTickers?.length ?? 99) - (b.relatedTickers?.length ?? 99))
+      .slice(0, 3)
+      .map((n) => ({
+        title: n.title as string,
+        publisher: n.publisher ?? null,
+        publishedAt: n.providerPublishTime ? new Date(n.providerPublishTime).toISOString() : null,
+        link: n.link ?? null,
+      }));
+    const earnings = summary?.calendarEvents?.earnings;
+    const dates = ((earnings?.earningsDate ?? []) as Date[]).map((d) => new Date(d).toISOString().slice(0, 10)).sort();
+    const next = dates.find((d) => d >= today) ?? null;
+    const last = [...dates].reverse().find((d) => d < today) ?? null;
+    return { symbol, news, nextEarnings: next, lastEarnings: last, earningsEstimated: !!earnings?.isEarningsDateEstimate };
+  });
+}

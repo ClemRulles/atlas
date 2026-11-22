@@ -13,14 +13,19 @@ export interface EarningsLine {
   instrumentId: string;
   valueEUR: number;
   profitsEUR: number;
-  dividendsEUR: number;
+  /** `null` quand le rendement en dividendes est inconnu : jamais compté comme zéro. */
+  dividendsEUR: number | null;
 }
 
 export interface Earnings {
   lines: EarningsLine[];
   profitsEUR: number;
+  /** Dividendes des lignes dont on connaît le rendement en dividendes. */
   dividendsEUR: number;
+  /** Bénéfices réinvestis, sur ces mêmes lignes seulement. */
   reinvestedEUR: number;
+  /** Bénéfices des lignes où la séparation dividendes / réinvesti est connue. */
+  splitProfitsEUR: number;
   /** Valeur couverte par un rendement connu. */
   coveredEUR: number;
   totalEUR: number;
@@ -49,16 +54,18 @@ export function realEarnings(
       instrumentId: instrument.id,
       valueEUR: line.valueEUR,
       profitsEUR: line.valueEUR * earningsYield,
-      dividendsEUR: line.valueEUR * (source?.dividendYield ?? 0),
+      dividendsEUR: source?.dividendYield === undefined ? null : line.valueEUR * source.dividendYield,
     });
   }
-  const profitsEUR = out.reduce((s, l) => s + l.profitsEUR, 0);
-  const dividendsEUR = out.reduce((s, l) => s + l.dividendsEUR, 0);
+  const split = out.filter((l) => l.dividendsEUR !== null);
+  const splitProfitsEUR = split.reduce((s, l) => s + l.profitsEUR, 0);
+  const dividendsEUR = split.reduce((s, l) => s + (l.dividendsEUR ?? 0), 0);
   return {
     lines: out.sort((a, b) => b.profitsEUR - a.profitsEUR),
-    profitsEUR,
+    profitsEUR: out.reduce((s, l) => s + l.profitsEUR, 0),
     dividendsEUR,
-    reinvestedEUR: profitsEUR - dividendsEUR,
+    reinvestedEUR: splitProfitsEUR - dividendsEUR,
+    splitProfitsEUR,
     coveredEUR: out.reduce((s, l) => s + l.valueEUR, 0),
     totalEUR,
     unknown,

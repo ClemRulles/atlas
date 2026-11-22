@@ -3,7 +3,7 @@ import { parseCsv, parseDate, parseNumber, parseSide, splitLine } from "./csv";
 import { analyze } from "./analysis";
 import { assetTypeOf, cleanCloses, displayName, exchangeDate, exchangeRank, isValidIsin, normalizeCurrency } from "./market-format";
 import { elide } from "./domain/sentence";
-import { heldQuantity, instrumentFrom } from "./user-data";
+import { companiesToQuote, companyQuotesFrom, compositionsFrom, compositionsNeeded, heldQuantity, instrumentFrom, withCompanyFx } from "./user-data";
 import { DEFAULT_SETTINGS, fxKey, makeBackup, marketFrom, oldestFetch, readBackup, seriesNeeded, staleSeries, type UserPortfolio } from "./user-data";
 
 const portfolio: UserPortfolio = {
@@ -183,5 +183,42 @@ describe("noms et création de ligne", () => {
   it("compte la quantité détenue à une date", () => {
     expect(heldQuantity(portfolio, "IWDA.AS", "2024-12-31")).toBe(15);
     expect(heldQuantity(portfolio, "IWDA.AS", "2023-06-01")).toBe(5);
+  });
+});
+
+describe("compositions et cours des entreprises", () => {
+  const now = Date.parse("2026-11-22T12:00:00Z");
+  const withFund: UserPortfolio = {
+    ...portfolio,
+    instruments: { ...portfolio.instruments, "VWCE.DE": { id: "VWCE.DE", symbol: "VWCE.DE", name: "Vanguard FTSE All-World", type: "etf", currency: "EUR" } },
+  };
+
+  it("redemande une composition chaque semaine, et une absence chaque jour", () => {
+    const cache = {
+      "IWDA.AS": { fetchedAt: now - 2 * 86_400_000, composition: { instrumentId: "IWDA.AS", source: "yahoo", holdings: [] } },
+      "VWCE.DE": { fetchedAt: now - 2 * 86_400_000, composition: null },
+    };
+    expect(compositionsNeeded(withFund, cache, now).map((i) => i.id)).toEqual(["VWCE.DE"]);
+    expect(compositionsNeeded(withFund, {}, now).map((i) => i.id).sort()).toEqual(["IWDA.AS", "VWCE.DE"]);
+    expect(compositionsFrom(cache)).toEqual({ "IWDA.AS": cache["IWDA.AS"].composition, "VWCE.DE": undefined });
+  });
+
+  it("cote les grandes entreprises tenues via les fonds, pas celles détenues en direct", () => {
+    const targets = companiesToQuote(
+      [
+        { key: "US67066G1040", symbol: "NVDA", direct: true },
+        { key: "name:apple", symbol: "AAPL", direct: false },
+        { key: "name:sans ticker", direct: false },
+      ],
+      12,
+    );
+    expect(targets).toEqual([{ key: "name:apple", symbol: "AAPL" }]);
+    const cache = {
+      AAPL: { from: "x", fetchedAt: now, currency: "USD", points: [{ date: "2026-11-20", close: 230 }] },
+      "EURUSD=X": { from: "x", fetchedAt: now, currency: "USD", points: [{ date: "2026-11-20", close: 1.1 }] },
+    };
+    const quotes = companyQuotesFrom(targets, cache);
+    expect(quotes).toEqual({ "name:apple": { currency: "USD", points: cache.AAPL.points } });
+    expect(withCompanyFx({ prices: {}, fx: {} }, quotes, cache).fx.USD).toEqual(cache["EURUSD=X"].points);
   });
 });

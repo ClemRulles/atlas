@@ -1,4 +1,4 @@
-import { dayStory, type DayStory } from "@/lib/domain/contributors";
+import { dayStory, type CompanyQuotes, type DayStory } from "@/lib/domain/contributors";
 import { realEarnings, type Earnings } from "@/lib/domain/earnings";
 import { lifeSlices, type LifeSlices } from "@/lib/domain/life-slices";
 import {
@@ -24,6 +24,8 @@ import { valuePositions, valueSeries, type SeriesPoint, type ValuedLine } from "
 /** Tout ce qu'il faut pour décrire un portefeuille. Les données de démo et les vraies ont la même forme. */
 export interface PortfolioData {
   instruments: Record<string, Instrument>;
+  /** Cours des grandes entreprises détenues via les fonds, pour la phrase du jour. */
+  companyQuotes?: CompanyQuotes;
   transactions: Transaction[];
   market: MarketData;
   compositions: Compositions;
@@ -82,7 +84,7 @@ export function analyze(data: PortfolioData, today: string): Snapshot {
   const { positions } = buildPositions(transactions, instruments, market, today);
   const open = openPositions(positions);
   const valuation = valuePositions(open, instruments, market, today);
-  const story = dayStory(open, instruments, market, compositions, today);
+  const story = dayStory(open, instruments, market, compositions, today, data.companyQuotes);
   const first = transactions.reduce<string | null>((min, t) => (!min || t.date < min ? t.date : min), null);
   const series = first ? valueSeries(transactions, instruments, market, tradingDates(market, first, today)) : [];
   const twr = timeWeightedReturn(series);

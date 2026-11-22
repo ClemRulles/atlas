@@ -22,6 +22,9 @@ export interface ExposureVia {
 export interface CompanyExposure {
   key: string;
   name: string;
+  /** Un ticker connu pour cette entreprise (pour aller chercher son cours, ses actualités). */
+  symbol?: string;
+  isin?: string;
   valueEUR: number;
   /** Part du portefeuille total. */
   weight: number;
@@ -46,12 +49,20 @@ export interface RealExposure {
 }
 
 const symbolRoot = (symbol: string) => symbol.toUpperCase().split(".")[0];
-const nameKey = (name: string) =>
+/**
+ * Nom d'entreprise réduit à l'essentiel, pour rapprocher « Alphabet Inc Class A » et « Alphabet Inc Class C »,
+ * ou « NVIDIA Corp » et « NVIDIA Corporation ».
+ */
+export const nameKey = (name: string) =>
   name
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/\.com\b/g, "")
+    .replace(/\bclass [a-z]\b|\bser(ies)? [a-z]\b|\b(adr|reg|registered|shs|ordinary shares?)\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(inc|incorporated|corp|corporation|co|company|ltd|limited|plc|sa|nv|n v|ag|se|spa|ab|as|asa|holding|holdings|group|the|and)\b/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 
 /** Poids utilisables d'une composition : positifs, ramenés à 100 % si leur somme dépasse 1. */
@@ -74,8 +85,17 @@ function buildAliases(instruments: Instrument[], compositions: FundComposition[]
 
 function keyOf(aliases: Map<string, string>, isin?: string, symbol?: string, name?: string): string {
   if (isin) return isin;
-  if (symbol) return aliases.get(symbolRoot(symbol)) ?? `symbol:${symbolRoot(symbol)}`;
-  return `name:${nameKey(name ?? "")}`;
+  const alias = symbol ? aliases.get(symbolRoot(symbol)) : undefined;
+  if (alias) return alias;
+  // Sans ISIN connu, le nom rapproche mieux que le ticker (deux classes d'actions, deux places).
+  const byName = nameKey(name ?? "");
+  if (byName) return `name:${byName}`;
+  return symbol ? `symbol:${symbolRoot(symbol)}` : "name:";
+}
+
+/** « Alphabet Inc Class A » → « Alphabet Inc » : la classe d'actions n'aide pas à lire. */
+function cleanName(name: string): string {
+  return name.replace(/\s+class\s+[a-z]\b/gi, "").trim();
 }
 
 export function realExposure(
@@ -89,15 +109,17 @@ export function realExposure(
     held.map((l) => compositions[l.instrumentId]).filter((c): c is FundComposition => !!c),
   );
   const companies = new Map<string, CompanyExposure>();
-  const add = (key: string, name: string, valueEUR: number, instrumentId: string, direct: boolean) => {
+  const add = (key: string, name: string, valueEUR: number, instrumentId: string, direct: boolean, symbol?: string, isin?: string) => {
     let c = companies.get(key);
     if (!c) {
-      c = { key, name, valueEUR: 0, weight: 0, via: [], direct: false };
+      c = { key, name: cleanName(name), valueEUR: 0, weight: 0, via: [], direct: false };
       companies.set(key, c);
     }
     c.valueEUR += valueEUR;
     c.direct ||= direct;
     if (direct) c.name = name;
+    if (symbol && (!c.symbol || direct)) c.symbol = symbol;
+    if (isin && !c.isin) c.isin = isin;
     const via = c.via.find((v) => v.instrumentId === instrumentId);
     if (via) via.valueEUR += valueEUR;
     else c.via.push({ instrumentId, valueEUR });
@@ -115,7 +137,7 @@ export function realExposure(
     const instrument = instruments[line.instrumentId];
     totalEUR += value;
     if (instrument.type === "stock") {
-      add(keyOf(aliases, instrument.isin, instrument.symbol, instrument.name), instrument.name, value, instrument.id, true);
+      add(keyOf(aliases, instrument.isin, instrument.symbol, instrument.name), instrument.name, value, instrument.id, true, instrument.symbol, instrument.isin);
       detailedEUR += value;
       continue;
     }
@@ -128,7 +150,7 @@ export function realExposure(
     largestFund = Math.max(largestFund, composition.holdingsCount ?? 0);
     let covered = 0;
     for (const h of usableHoldings(composition)) {
-      add(keyOf(aliases, h.isin, h.symbol, h.name), h.name, value * h.weight, instrument.id, false);
+      add(keyOf(aliases, h.isin, h.symbol, h.name), h.name, value * h.weight, instrument.id, false, h.symbol, h.isin);
       covered += h.weight;
     }
     detailedEUR += value * covered;

@@ -83,6 +83,22 @@ describe("realExposure", () => {
     expect(merged.companies[0].valueEUR).toBeCloseTo(150, 9);
   });
 
+  it("fusionne deux classes d'actions et deux libellés d'une même entreprise sans ISIN", () => {
+    const etf: FundComposition = {
+      instrumentId: "A",
+      source: "test",
+      holdings: [
+        { name: "Alphabet Inc Class A", symbol: "GOOGL", weight: 0.02 },
+        { name: "Alphabet Inc Class C", symbol: "GOOG", weight: 0.015 },
+        { name: "NVIDIA Corp", symbol: "NVDA", weight: 0.05 },
+      ],
+    };
+    const other: FundComposition = { instrumentId: "B", source: "test", holdings: [{ name: "NVIDIA Corporation", symbol: "NVDA", weight: 0.04 }] };
+    const e = realExposure([{ instrumentId: "A", valueEUR: 1000 }, { instrumentId: "B", valueEUR: 1000 }], instruments, { A: etf, B: other });
+    expect(e.companies.map((c) => [c.name, Math.round(c.valueEUR)])).toEqual([["NVIDIA Corp", 90], ["Alphabet Inc", 35]]);
+    expect(e.companies[0]).toMatchObject({ symbol: "NVDA", via: [{ instrumentId: "A", valueEUR: 50 }, { instrumentId: "B", valueEUR: 40 }] });
+  });
+
   it("ramène à 100 % une composition dont les poids dépassent 1", () => {
     const etf: FundComposition = { instrumentId: "A", source: "test", holdings: [{ name: "X", isin: "ISIN-X", weight: 0.9 }, { name: "Y", isin: "ISIN-Y", weight: 0.3 }] };
     const e = realExposure([{ instrumentId: "A", valueEUR: 1200 }], instruments, { A: etf });

@@ -1,7 +1,10 @@
 import { realExposure } from "./lookthrough";
 import { closeAt, fxAt } from "./market";
 import type { Position } from "./positions";
-import type { Compositions, Instrument, MarketData } from "./types";
+import type { Compositions, Instrument, MarketData, PriceHistory } from "./types";
+
+/** Cours d'une entreprise détenue seulement via des fonds, par clé d'entreprise (ISIN ou nom). */
+export type CompanyQuotes = Record<string, { currency: string; points: PriceHistory } | undefined>;
 import { dayChange, type DayChange } from "./valuation";
 
 /**
@@ -37,6 +40,7 @@ export function dayStory(
   market: MarketData,
   compositions: Compositions,
   date: string,
+  companyQuotes: CompanyQuotes = {},
 ): DayStory {
   const change = dayChange(positions, instruments, market, date);
   const previous = change.lines.map((l) => ({ instrumentId: l.instrumentId, valueEUR: l.previousEUR }));
@@ -53,13 +57,15 @@ export function dayStory(
   const companies: CompanyContribution[] = [];
   for (const company of exposure.companies) {
     const instrument = stocks.get(company.key);
-    if (!instrument || !closeDate) continue;
-    const history = market.prices[instrument.id];
+    const quote = instrument ? { currency: instrument.currency, points: market.prices[instrument.id] } : companyQuotes[company.key];
+    if (!quote || !closeDate) continue;
+    const history = quote.points;
     const last = closeAt(history, closeDate);
     const before = last ? closeAt(history, last.date, true) : undefined;
-    if (!last || !before) continue;
-    const fxLast = fxAt(market, instrument.currency, last.date);
-    const fxBefore = fxAt(market, instrument.currency, before.date);
+    // Une clôture trop ancienne (place fermée depuis des jours) ne raconte pas la journée.
+    if (!last || !before || Date.parse(closeDate) - Date.parse(last.date) > 4 * 86_400_000) continue;
+    const fxLast = fxAt(market, quote.currency, last.date);
+    const fxBefore = fxAt(market, quote.currency, before.date);
     if (fxLast === undefined || fxBefore === undefined) continue;
     const pct = last.close / fxLast / (before.close / fxBefore) - 1;
     const funds = company.via.filter((v) => instruments[v.instrumentId]?.type !== "stock");

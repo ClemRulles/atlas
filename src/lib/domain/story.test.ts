@@ -70,6 +70,19 @@ describe("dayStory", () => {
     expect(s.companies[0].changeEUR).toBeCloseTo(300, 9);
   });
 
+  it("raconte une entreprise tenue seulement via les ETF grâce à son cours", () => {
+    const comps: Compositions = { ETF: { instrumentId: "ETF", source: "test", holdings: [{ name: "Apple Inc", symbol: "AAPL", weight: 0.1 }] } };
+    const m = market(100, 1);
+    const { positions } = buildPositions([buy("1", "ETF", 100, 100)], instruments, m, "2025-11-14");
+    const quotes = { "name:apple": { currency: "USD", points: [{ date: "2025-11-13", close: 200 }, { date: "2025-11-14", close: 210 }] } };
+    const s = dayStory(positions, instruments, m, comps, "2025-11-14", quotes);
+    // 10 % de 10 000 € = 1 000 € d'Apple ; +5 % → +50 €.
+    expect(s.companies[0]).toMatchObject({ key: "name:apple", name: "Apple Inc", direct: false, viaFunds: 1 });
+    expect(s.companies[0].changeEUR).toBeCloseTo(50, 9);
+    const stale = dayStory(positions, instruments, m, comps, "2025-11-14", { "name:apple": { currency: "USD", points: [{ date: "2025-11-03", close: 200 }, { date: "2025-11-04", close: 210 }] } });
+    expect(stale.companies).toEqual([]);
+  });
+
   it("n'estime rien pour une entreprise dont on ne connaît pas le cours", () => {
     const s = story({ ...market(110, 1), prices: { ...market(110, 1).prices, NV: [] } });
     expect(s.companies).toEqual([]);
@@ -135,6 +148,14 @@ describe("realEarnings", () => {
     expect(e.totalEUR).toBe(16_000);
     expect(e.unknown).toEqual(["ETF2"]);
     expect(e.lines[0].instrumentId).toBe("ETF");
+    expect(e.splitProfitsEUR).toBeCloseTo(520, 9);
+  });
+
+  it("ne compte jamais un rendement en dividendes inconnu comme zéro", () => {
+    const e = realEarnings([{ instrumentId: "ETF", valueEUR: 10_000 }], instruments, { ETF: { ...compositions.ETF!, dividendYield: undefined } });
+    expect(e.profitsEUR).toBeCloseTo(500, 9);
+    expect(e.lines[0].dividendsEUR).toBeNull();
+    expect(e).toMatchObject({ dividendsEUR: 0, reinvestedEUR: 0, splitProfitsEUR: 0 });
   });
 });
 

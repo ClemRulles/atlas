@@ -4,12 +4,19 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { analyze, localToday, type PortfolioData, type Snapshot } from "@/lib/analysis";
 import { dbGet, dbSet } from "@/lib/db";
 import { buildDemoPortfolio } from "@/lib/demo/portfolio";
-import type { Instrument, Transaction } from "@/lib/domain/types";
-import { refreshSeries } from "@/lib/market-client";
+import type { FundComposition, Instrument, Transaction } from "@/lib/domain/types";
+import { fetchComposition, refreshSeries } from "@/lib/market-client";
 import {
+  companiesToQuote,
+  companyQuotesFrom,
+  compositionsFrom,
+  compositionsNeeded,
   DEFAULT_SETTINGS,
   EMPTY_PORTFOLIO,
+  fxKey,
   marketFrom,
+  withCompanyFx,
+  type CompositionCache,
   oldestFetch,
   seriesNeeded,
   staleSeries,
@@ -88,6 +95,8 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [cache, setCache] = useState<MarketCache>({});
   const [market, setMarket] = useState<MarketStatus>({ loading: false, updatedAt: null, failed: [] });
+  const [compositionCache, setCompositionCache] = useState<CompositionCache>({});
+  const [quoteTargets, setQuoteTargets] = useState<{ key: string; symbol: string }[]>([]);
   const cacheRef = useRef(cache);
   useEffect(() => {
     cacheRef.current = cache;
@@ -97,12 +106,14 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [savedPortfolio, savedSettings, savedCache] = await Promise.all([
+      const [savedPortfolio, savedSettings, savedCache, savedCompositions] = await Promise.all([
         dbGet<UserPortfolio>("portfolio"),
         dbGet<Settings>("settings"),
         dbGet<MarketCache>("market"),
+        dbGet<CompositionCache>("compositions"),
       ]);
       if (!alive) return;
+      if (savedCompositions) setCompositionCache(savedCompositions);
       if (savedPortfolio) setPortfolio(savedPortfolio);
       if (savedSettings) setSettings(savedSettings);
       if (savedCache) setCache(savedCache);
@@ -147,19 +158,73 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [loaded, mode, refreshMarket]);
 
+  // Compositions des fonds : chargées une fois par semaine, gardées sur l'appareil.
+  useEffect(() => {
+    if (!loaded || mode !== "real") return;
+    const todo = compositionsNeeded(portfolio, compositionCache, Date.now());
+    if (todo.length === 0) return;
+    let alive = true;
+    (async () => {
+      const fetched = await Promise.all(todo.map(async (i) => [i.id, { fetchedAt: Date.now(), composition: await fetchComposition(i).catch(() => undefined) }] as const));
+      if (!alive) return;
+      // Une erreur réseau (undefined) n'est pas mise en cache : on réessaiera.
+      const ok = fetched.filter(([, c]) => c.composition !== undefined) as [string, { fetchedAt: number; composition: FundComposition | null }][];
+      if (ok.length === 0) return;
+      setCompositionCache((current) => {
+        const next = { ...current, ...Object.fromEntries(ok) };
+        void dbSet("compositions", next);
+        return next;
+      });
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [loaded, mode, portfolio, compositionCache]);
+
   const data = useMemo<PortfolioData | null>(() => {
     if (!loaded || !mode || !today) return null;
     if (mode === "demo") return { ...buildDemoPortfolio(today), expenses: settings.expenses, expectedReturn: settings.expectedReturn };
+    const companyQuotes = companyQuotesFrom(quoteTargets, cache);
     return {
       instruments: portfolio.instruments,
       transactions: portfolio.transactions,
-      market: marketFrom(portfolio, cache),
-      compositions: {},
+      market: withCompanyFx(marketFrom(portfolio, cache), companyQuotes, cache),
+      compositions: compositionsFrom(compositionCache),
+      companyQuotes,
       expenses: settings.expenses,
       expectedReturn: settings.expectedReturn,
     };
-  }, [loaded, mode, today, portfolio, cache, settings]);
+  }, [loaded, mode, today, portfolio, cache, settings, compositionCache, quoteTargets]);
   const snapshot = useMemo(() => (data && today ? analyze(data, today) : null), [data, today]);
+
+  // Cours des grandes entreprises tenues via les fonds : c'est ce qui permet de dire « merci Nvidia ».
+  const targetsKey = snapshot && mode === "real" ? JSON.stringify(companiesToQuote(snapshot.exposure.companies)) : "[]";
+  useEffect(() => {
+    const targets = JSON.parse(targetsKey) as { key: string; symbol: string }[];
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- dérivé de l'instantané, mis en état pour éviter une boucle de calcul
+    setQuoteTargets(targets);
+    if (!today || targets.length === 0) return;
+    const from = new Date(Date.parse(today) - 14 * 86_400_000).toISOString().slice(0, 10);
+    let alive = true;
+    (async () => {
+      const stale = (key: string) => {
+        const c = cacheRef.current[key];
+        return !c || c.from > from || Date.now() - c.fetchedAt > MAX_AGE_MS;
+      };
+      const first = targets.filter((t) => stale(t.symbol)).map((t) => ({ key: t.symbol, from }));
+      let next = cacheRef.current;
+      if (first.length) next = (await refreshSeries(first, next)).cache;
+      const currencies = [...new Set(targets.map((t) => next[t.symbol]?.currency).filter((c): c is string => !!c && c !== "EUR"))];
+      const fx = currencies.filter((c) => stale(fxKey(c)) && !next[fxKey(c)]).map((c) => ({ key: fxKey(c), from }));
+      if (fx.length) next = (await refreshSeries(fx, next)).cache;
+      if (!alive || next === cacheRef.current) return;
+      setCache(next);
+      void dbSet("market", next);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [targetsKey, today]);
 
   const setMode = useCallback((next: Mode) => {
     setModeState(next);

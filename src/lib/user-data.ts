@@ -3,7 +3,8 @@
  * Fonctions pures : la persistance est dans db.ts, le réseau dans market-client.ts.
  */
 
-import type { Expense, Instrument, MarketData, PricePoint, Transaction } from "@/lib/domain/types";
+import type { CompanyQuotes } from "@/lib/domain/contributors";
+import type { Compositions, Expense, FundComposition, Instrument, MarketData, PricePoint, Transaction } from "@/lib/domain/types";
 import { displayName } from "@/lib/market-format";
 
 export interface UserPortfolio {
@@ -220,4 +221,64 @@ export function heldQuantity(portfolio: UserPortfolio, instrumentId: string, upT
   return portfolio.transactions
     .filter((t) => t.instrumentId === instrumentId && t.date <= upTo)
     .reduce((q, t) => q + (t.side === "buy" ? t.quantity : -t.quantity), 0);
+}
+
+/* ——— Compositions des fonds et cours des entreprises qu'ils contiennent ——— */
+
+export interface CachedComposition {
+  fetchedAt: number;
+  composition: FundComposition | null;
+}
+export type CompositionCache = Record<string, CachedComposition>;
+
+/** Une composition change peu : une fois par semaine suffit. Une absence est retentée chaque jour. */
+const COMPOSITION_MAX_AGE = 7 * 24 * 3600_000;
+const MISSING_RETRY = 24 * 3600_000;
+
+export function compositionsNeeded(portfolio: UserPortfolio, cache: CompositionCache, now: number): Instrument[] {
+  return Object.values(portfolio.instruments).filter((i) => {
+    if (i.type === "stock") return false;
+    const c = cache[i.id];
+    if (!c) return true;
+    return now - c.fetchedAt > (c.composition ? COMPOSITION_MAX_AGE : MISSING_RETRY);
+  });
+}
+
+export function compositionsFrom(cache: CompositionCache): Compositions {
+  return Object.fromEntries(Object.entries(cache).map(([id, c]) => [id, c.composition ?? undefined]));
+}
+
+interface CompanyLike {
+  key: string;
+  symbol?: string;
+  direct: boolean;
+}
+
+/** Les grandes entreprises tenues via des fonds dont on veut le cours (pour raconter la journée). */
+export function companiesToQuote(companies: CompanyLike[], limit = 12): { key: string; symbol: string }[] {
+  return companies
+    .filter((c) => !c.direct && c.symbol)
+    .slice(0, limit)
+    .map((c) => ({ key: c.key, symbol: c.symbol as string }));
+}
+
+/** Cours d'entreprises au format du moteur, à partir du cache des séries. */
+export function companyQuotesFrom(targets: { key: string; symbol: string }[], cache: MarketCache): CompanyQuotes {
+  const out: CompanyQuotes = {};
+  for (const t of targets) {
+    const series = cache[t.symbol];
+    if (series?.currency) out[t.key] = { currency: series.currency, points: series.points };
+  }
+  return out;
+}
+
+/** Ajoute aux données de marché les taux des devises des entreprises citées. */
+export function withCompanyFx(market: MarketData, quotes: CompanyQuotes, cache: MarketCache): MarketData {
+  const fx = { ...market.fx };
+  for (const q of Object.values(quotes)) {
+    if (!q || q.currency === "EUR" || fx[q.currency]) continue;
+    const rate = cache[fxKey(q.currency)];
+    if (rate) fx[q.currency] = rate.points;
+  }
+  return { ...market, fx };
 }
