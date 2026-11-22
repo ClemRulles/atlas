@@ -5,6 +5,8 @@ interface YahooQuoteShape {
   regularMarketPrice?: number;
   regularMarketPreviousClose?: number;
   currency?: string;
+  shortName?: string;
+  longName?: string;
 }
 
 interface YahooChartPoint {
@@ -22,18 +24,18 @@ export async function POST(req: NextRequest) {
     const symbols: string[] = Array.isArray(body?.symbols) ? body.symbols : [];
     const timeframe: string = body?.timeframe || '1M';
 
-    if (symbols.length === 0) {
-      return NextResponse.json({ quotes: {} });
-    }
-
-    let eurUsdRate = 1.08;
+    let eurUsdRate = 1.0968;
     try {
       const fx = (await yahooFinance.quote('EURUSD=X')) as YahooQuoteShape | null;
       if (fx && typeof fx.regularMarketPrice === 'number' && fx.regularMarketPrice > 0) {
         eurUsdRate = fx.regularMarketPrice;
       }
     } catch {
-      // Taux par défaut
+      // Taux de secours
+    }
+
+    if (symbols.length === 0) {
+      return NextResponse.json({ quotes: {}, eurUsdRate });
     }
 
     const now = new Date();
@@ -80,12 +82,13 @@ export async function POST(req: NextRequest) {
           const quote = (await yahooFinance.quote(sym)) as YahooQuoteShape | null;
           if (!quote || typeof quote.regularMarketPrice !== 'number') return;
 
-          const currency = (quote.currency || 'EUR').toUpperCase();
+          const currency = (quote.currency || 'EUR').toUpperCase() === 'USD' ? 'USD' : 'EUR';
           const toEur = (val: number) => (currency === 'USD' ? val / eurUsdRate : val);
 
           const priceEur = Number(toEur(quote.regularMarketPrice).toFixed(4));
           const prevCloseRaw = quote.regularMarketPreviousClose ?? quote.regularMarketPrice;
           const previousCloseEur = Number(toEur(prevCloseRaw).toFixed(4));
+          const resolvedName = quote.shortName || quote.longName || sym;
 
           let history: { date: string; priceEur: number }[] = [];
           try {
@@ -112,19 +115,21 @@ export async function POST(req: NextRequest) {
 
           quotes[sym] = {
             symbol: sym,
+            name: resolvedName,
+            currency,
             priceEur,
             previousCloseEur,
             history,
             source: 'yahoo',
           };
         } catch {
-          // Symbole introuvable
+          // Symbole introuvable sur Yahoo
         }
       })
     );
 
-    return NextResponse.json({ quotes });
+    return NextResponse.json({ quotes, eurUsdRate });
   } catch {
-    return NextResponse.json({ quotes: {} }, { status: 200 });
+    return NextResponse.json({ quotes: {}, eurUsdRate: 1.0968 }, { status: 200 });
   }
 }

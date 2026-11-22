@@ -1,4 +1,5 @@
 import {
+  AssetCurrency,
   EnrichedHolding,
   MarketQuoteResult,
   PortfolioHolding,
@@ -82,6 +83,7 @@ function buildFallbackQuote(
 
   return {
     symbol: holding.symbol || holding.name,
+    currency: holding.currency || 'EUR',
     priceEur: basePrice,
     previousCloseEur: prevPrice,
     history: points,
@@ -93,7 +95,7 @@ export async function fetchQuotesForHoldings(
   holdings: PortfolioHolding[],
   timeframe: TimeframeKey,
   refDate: Date = new Date('2026-11-22T00:00:00Z')
-): Promise<Record<string, MarketQuoteResult>> {
+): Promise<{ quotes: Record<string, MarketQuoteResult>; eurUsdRate: number }> {
   const symbols = Array.from(
     new Set(
       holdings
@@ -103,6 +105,7 @@ export async function fetchQuotesForHoldings(
   );
 
   let serverMap: Record<string, MarketQuoteResult> = {};
+  let eurUsdRate = 1.0968;
 
   if (symbols.length > 0) {
     try {
@@ -114,6 +117,9 @@ export async function fetchQuotesForHoldings(
       if (res.ok) {
         const data = await res.json();
         serverMap = data.quotes || {};
+        if (typeof data.eurUsdRate === 'number' && data.eurUsdRate > 0) {
+          eurUsdRate = data.eurUsdRate;
+        }
       }
     } catch {
       // Fallback silencieux
@@ -128,6 +134,7 @@ export async function fetchQuotesForHoldings(
       const unitVal = h.buyPriceEur > 0 ? h.buyPriceEur : 1;
       result[h.id] = {
         symbol: 'CASH-EUR',
+        currency: h.currency || 'EUR',
         priceEur: unitVal,
         previousCloseEur: unitVal,
         history: [
@@ -142,13 +149,16 @@ export async function fetchQuotesForHoldings(
     const symKey = (h.symbol || '').trim().toUpperCase();
     const live = serverMap[symKey] || serverMap[(h.symbol || '').trim()];
     if (live && live.priceEur > 0) {
-      result[h.id] = live;
+      result[h.id] = {
+        ...live,
+        currency: (live.currency || h.currency || 'EUR') as AssetCurrency,
+      };
     } else {
       result[h.id] = buildFallbackQuote(h, refDate);
     }
   }
 
-  return result;
+  return { quotes: result, eurUsdRate };
 }
 
 export function enrichHoldings(
@@ -167,6 +177,7 @@ export function enrichHoldings(
 
   return holdings.map((h) => {
     const q = quotes[h.id] || buildFallbackQuote(h, refDate);
+    const currency: AssetCurrency = h.currency || q.currency || 'EUR';
     const currentPriceEur = q.priceEur;
     const currentValueEur = currentPriceEur * h.quantity;
     const costBasisEur = h.buyPriceEur * h.quantity;
@@ -196,6 +207,7 @@ export function enrichHoldings(
 
     return {
       ...h,
+      currency,
       currentPriceEur,
       currentValueEur,
       costBasisEur,

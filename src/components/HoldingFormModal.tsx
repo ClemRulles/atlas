@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Trash2, X } from 'lucide-react';
-import { AssetCategory, PortfolioHolding } from '@/types/portfolio';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Sparkles, Trash2, X } from 'lucide-react';
+import { DEFAULT_INSTITUTIONS, TICKER_SUGGESTIONS } from '@/data/initialPortfolio';
+import { AssetCategory, AssetCurrency, PortfolioHolding } from '@/types/portfolio';
 
 interface HoldingFormModalProps {
   isOpen: boolean;
   initialHolding?: PortfolioHolding | null;
+  institutions?: string[];
   onClose: () => void;
   onSave: (holding: PortfolioHolding) => void;
   onDelete?: (id: string) => void;
@@ -21,11 +23,10 @@ const CATEGORIES: AssetCategory[] = [
   'Or / Matières premières',
 ];
 
-const INSTITUTIONS = ['Trade Republic', 'Revolut', 'BGL', 'Banque classique', 'Autre'];
-
 export default function HoldingFormModal({
   isOpen,
   initialHolding,
+  institutions = DEFAULT_INSTITUTIONS,
   onClose,
   onSave,
   onDelete,
@@ -33,17 +34,28 @@ export default function HoldingFormModal({
   const [category, setCategory] = useState<AssetCategory>('Actions');
   const [name, setName] = useState<string>('');
   const [symbol, setSymbol] = useState<string>('');
+  const [currency, setCurrency] = useState<AssetCurrency>('EUR');
   const [quantity, setQuantity] = useState<string>('1');
   const [buyPriceEur, setBuyPriceEur] = useState<string>('100');
-  const [buyDate, setBuyDate] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [institution, setInstitution] = useState<string>('Trade Republic');
+  const [buyDate, setBuyDate] = useState<string>('2026-11-22');
+  const [institution, setInstitution] = useState<string>(institutions[0] || 'Trade Republic');
   const [manualCurrentPriceEur, setManualCurrentPriceEur] = useState<string>('');
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+
+  const availableInstitutions = useMemo(() => {
+    const base = institutions.length > 0 ? institutions : DEFAULT_INSTITUTIONS;
+    if (initialHolding?.institution && !base.includes(initialHolding.institution)) {
+      return [initialHolding.institution, ...base];
+    }
+    return base;
+  }, [institutions, initialHolding]);
 
   useEffect(() => {
     if (initialHolding) {
       setCategory(initialHolding.category);
       setName(initialHolding.name);
       setSymbol(initialHolding.symbol || '');
+      setCurrency(initialHolding.currency || 'EUR');
       setQuantity(String(initialHolding.quantity));
       setBuyPriceEur(String(initialHolding.buyPriceEur));
       setBuyDate(initialHolding.buyDate);
@@ -53,26 +65,53 @@ export default function HoldingFormModal({
           ? String(initialHolding.manualCurrentPriceEur)
           : ''
       );
+      setShowSuggestions(false);
     } else {
       setCategory('Actions');
       setName('');
       setSymbol('');
+      setCurrency('EUR');
       setQuantity('1');
       setBuyPriceEur('100');
       setBuyDate(new Date().toISOString().slice(0, 10));
-      setInstitution('Trade Republic');
+      setInstitution(availableInstitutions[0] || 'Trade Republic');
       setManualCurrentPriceEur('');
+      setShowSuggestions(false);
     }
-  }, [initialHolding, isOpen]);
+  }, [initialHolding, isOpen, availableInstitutions]);
+
+  const filteredSuggestions = useMemo(() => {
+    const query = symbol.trim().toLowerCase();
+    if (!query) {
+      return TICKER_SUGGESTIONS.filter((s) => s.category === category).slice(0, 5);
+    }
+    return TICKER_SUGGESTIONS.filter(
+      (s) =>
+        s.symbol.toLowerCase().includes(query) || s.name.toLowerCase().includes(query)
+    ).slice(0, 6);
+  }, [symbol, category]);
 
   if (!isOpen) return null;
 
   const handleCategoryChange = (nextCat: AssetCategory) => {
     setCategory(nextCat);
     if (nextCat === 'Cash') {
-      setSymbol('CASH');
+      setSymbol('');
       setQuantity('1');
+      setCurrency('EUR');
+      setShowSuggestions(false);
     }
+  };
+
+  const handleSelectSuggestion = (item: (typeof TICKER_SUGGESTIONS)[number]) => {
+    setSymbol(item.symbol);
+    setName(item.name);
+    setCategory(item.category);
+    setCurrency(item.currency);
+    if (item.fallbackPriceEur) {
+      setManualCurrentPriceEur(String(item.fallbackPriceEur));
+    }
+    setShowSuggestions(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -92,6 +131,7 @@ export default function HoldingFormModal({
         (symbol.trim() ? symbol.trim().toUpperCase() : `${category} (${institution})`),
       category,
       symbol: category === 'Cash' ? undefined : symbol.trim().toUpperCase() || undefined,
+      currency,
       quantity: parsedQty,
       buyPriceEur: category === 'Cash' ? parseFloat(quantity) || parsedBuy : parsedBuy,
       buyDate,
@@ -103,7 +143,10 @@ export default function HoldingFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs">
-      <div className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-[#131823] text-slate-900 dark:text-white p-5 pb-8 shadow-2xl border border-slate-200/80 dark:border-slate-800">
+      <div
+        style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
+        className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-[#131823] text-slate-900 dark:text-white p-5 shadow-2xl border border-slate-200/80 dark:border-slate-800"
+      >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold">
             {initialHolding ? 'Modifier la ligne' : 'Nouvel investissement'}
@@ -130,7 +173,7 @@ export default function HoldingFormModal({
                     key={cat}
                     type="button"
                     onClick={() => handleCategoryChange(cat)}
-                    className={`px-3 py-2.5 rounded-xl text-xs font-semibold text-left border transition ${
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold text-left border transition ${
                       active
                         ? 'bg-blue-600 text-white border-blue-600'
                         : 'bg-slate-50 dark:bg-[#0D111A] border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
@@ -143,19 +186,70 @@ export default function HoldingFormModal({
             </div>
           </div>
 
+          {category !== 'Cash' && (
+            <div className="relative">
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                Ticker ou code ISIN (autocomplétion)
+              </label>
+              <input
+                type="text"
+                placeholder="Ex. AAPL, NVDA, BNP.PA, BE0167243154..."
+                value={symbol}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 160)}
+                onChange={(e) => {
+                  setSymbol(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500 uppercase"
+              />
+
+              {showSuggestions && filteredSuggestions.length > 0 && (
+                <div className="mt-1.5 rounded-2xl bg-white dark:bg-[#0D111A] border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredSuggestions.map((sug) => (
+                    <button
+                      key={sug.symbol}
+                      type="button"
+                      onMouseDown={() => handleSelectSuggestion(sug)}
+                      className="w-full px-3.5 py-2.5 text-left flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/70 transition"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-blue-700 dark:text-sky-400">
+                            {sug.symbol}
+                          </span>
+                          <span className="text-xs font-medium truncate">{sug.name}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">{sug.category}</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
+                        {sug.currency}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
-            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-              Nom ou libellé
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Libellé / Nom de l’actif
+              </label>
+              {category !== 'Cash' && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-sky-500">
+                  <Sparkles className="w-3 h-3" /> Auto-rempli via ticker
+                </span>
+              )}
+            </div>
             <input
               type="text"
               required
               placeholder={
                 category === 'Cash'
                   ? 'Ex. Compte épargne / Liquidités EUR'
-                  : category === 'Fonds'
-                  ? 'Ex. Fonds BNP / Amundi'
-                  : 'Ex. Apple, NVIDIA, MSCI World, Bitcoin...'
+                  : 'Rempli automatiquement ou saisissez le nom'
               }
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -163,30 +257,30 @@ export default function HoldingFormModal({
             />
           </div>
 
-          {category !== 'Cash' && (
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                {category === 'Fonds'
-                  ? 'Code ISIN ou Ticker (optionnel)'
-                  : category === 'Crypto'
-                  ? 'Symbole Yahoo (ex. BTC-EUR, ETH-EUR)'
-                  : category === 'Or / Matières premières'
-                  ? 'Ticker (ex. GC=F, GLD, XAUUSD=X)'
-                  : 'Ticker boursier (ex. AAPL, NVDA, CW8.PA)'}
-              </label>
-              <input
-                type="text"
-                placeholder={
-                  category === 'Fonds'
-                    ? 'Ex. LU1681043599 (laisser vide si non coté)'
-                    : 'Ex. AAPL'
-                }
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value)}
-                className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500 uppercase"
-              />
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+              Devise de cotation / référence
+            </label>
+            <div className="grid grid-cols-2 gap-2.5">
+              {(['EUR', 'USD'] as AssetCurrency[]).map((cur) => {
+                const active = currency === cur;
+                return (
+                  <button
+                    key={cur}
+                    type="button"
+                    onClick={() => setCurrency(cur)}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                      active
+                        ? 'bg-[#0A1628] text-white border-blue-500/40'
+                        : 'bg-slate-50 dark:bg-[#0D111A] border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {cur === 'EUR' ? 'Euro (€ / EUR)' : 'Dollar ($ / USD)'}
+                  </button>
+                );
+              })}
             </div>
-          )}
+          </div>
 
           {category === 'Cash' ? (
             <div>
@@ -203,8 +297,8 @@ export default function HoldingFormModal({
               />
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="min-w-0">
                 <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
                   Quantité détenue
                 </label>
@@ -214,10 +308,10 @@ export default function HoldingFormModal({
                   required
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
-                  className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500"
+                  className="w-full min-w-0 rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
                   Prix d’achat unitaire (€)
                 </label>
@@ -227,7 +321,7 @@ export default function HoldingFormModal({
                   required
                   value={buyPriceEur}
                   onChange={(e) => setBuyPriceEur(e.target.value)}
-                  className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500"
+                  className="w-full min-w-0 rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500"
                 />
               </div>
             </div>
@@ -236,7 +330,7 @@ export default function HoldingFormModal({
           {category !== 'Cash' && (
             <div>
               <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                Valeur actuelle unitaire en € (optionnel — utilisé si Yahoo ne trouve pas le code)
+                Valeur actuelle unitaire en € (secours si absent sur Yahoo)
               </label>
               <input
                 type="number"
@@ -249,8 +343,9 @@ export default function HoldingFormModal({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          {/* Grille séparée sans chevauchement sur mobile */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
                 Date d’achat
               </label>
@@ -259,20 +354,20 @@ export default function HoldingFormModal({
                 required
                 value={buyDate}
                 onChange={(e) => setBuyDate(e.target.value)}
-                className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500"
+                className="w-full min-w-0 max-w-full appearance-none rounded-xl px-3 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500"
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
                 Véhicule / Établissement
               </label>
               <select
                 value={institution}
                 onChange={(e) => setInstitution(e.target.value)}
-                className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500"
+                className="w-full min-w-0 rounded-xl px-3 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500"
               >
-                {INSTITUTIONS.map((inst) => (
+                {availableInstitutions.map((inst) => (
                   <option key={inst} value={inst}>
                     {inst}
                   </option>

@@ -5,6 +5,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Bot,
+  Clock,
   LayoutDashboard,
   Lock,
   Newspaper,
@@ -21,7 +22,7 @@ import InteractiveChart, { RangeSelection } from '@/components/InteractiveChart'
 import DonutAllocation from '@/components/DonutAllocation';
 import HoldingFormModal from '@/components/HoldingFormModal';
 import SettingsModal from '@/components/SettingsModal';
-import { INITIAL_HOLDINGS } from '@/data/initialPortfolio';
+import { DEFAULT_INSTITUTIONS, INITIAL_HOLDINGS } from '@/data/initialPortfolio';
 import {
   buildPortfolioSeries,
   enrichHoldings,
@@ -29,7 +30,8 @@ import {
 } from '@/lib/marketClient';
 import { MarketQuoteResult, PortfolioHolding, TimeframeKey } from '@/types/portfolio';
 
-const HOLDINGS_STORAGE_KEY = 'wealthview_holdings_v1';
+const HOLDINGS_STORAGE_KEY = 'wealthview_holdings_v4';
+const INSTITUTIONS_STORAGE_KEY = 'wealthview_institutions_v1';
 const TIMEFRAMES: TimeframeKey[] = ['1J', '1S', '1M', 'YTD', 'LTM', '2A', '5A', '10A', 'Tout'];
 
 type TabKey = 'synthese' | 'portefeuille' | 'actus' | 'conseiller';
@@ -53,7 +55,9 @@ export default function WealthAppPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('synthese');
   const [timeframe, setTimeframe] = useState<TimeframeKey>('LTM');
   const [holdings, setHoldings] = useState<PortfolioHolding[]>(INITIAL_HOLDINGS);
+  const [institutions, setInstitutions] = useState<string[]>(DEFAULT_INSTITUTIONS);
   const [quotes, setQuotes] = useState<Record<string, MarketQuoteResult>>({});
+  const [eurUsdRate, setEurUsdRate] = useState<number>(1.0968);
   const [loadingQuotes, setLoadingQuotes] = useState<boolean>(false);
   const [hoverPoint, setHoverPoint] = useState<{ date: string; valueEur: number } | null>(null);
   const [rangeSelection, setRangeSelection] = useState<RangeSelection | null>(null);
@@ -85,10 +89,26 @@ export default function WealthAppPage() {
           setHoldings(parsed);
         }
       }
+      const savedInst = localStorage.getItem(INSTITUTIONS_STORAGE_KEY);
+      if (savedInst) {
+        const parsedInst = JSON.parse(savedInst);
+        if (Array.isArray(parsedInst) && parsedInst.length > 0) {
+          setInstitutions(parsedInst);
+        }
+      }
     } catch {
       // Ignore storage error
     }
   }, []);
+
+  const persistInstitutions = (next: string[]) => {
+    setInstitutions(next);
+    try {
+      localStorage.setItem(INSTITUTIONS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Ignore storage error
+    }
+  };
 
   const persistHoldings = (next: PortfolioHolding[]) => {
     setHoldings(next);
@@ -102,8 +122,13 @@ export default function WealthAppPage() {
   const refreshQuotes = useCallback(
     async (items: PortfolioHolding[], tf: TimeframeKey) => {
       setLoadingQuotes(true);
-      const q = await fetchQuotesForHoldings(items, tf, clientNow);
+      const { quotes: q, eurUsdRate: fxRate } = await fetchQuotesForHoldings(
+        items,
+        tf,
+        clientNow
+      );
       setQuotes(q);
+      setEurUsdRate(fxRate);
       setLoadingQuotes(false);
     },
     [clientNow]
@@ -189,6 +214,7 @@ export default function WealthAppPage() {
           portfolio: enriched.map((h) => ({
             name: h.name,
             symbol: h.symbol,
+            currency: h.currency,
             category: h.category,
             valueEur: Math.round(h.currentValueEur),
             pnlPct: Number(h.pnlPercent.toFixed(1)),
@@ -232,6 +258,7 @@ export default function WealthAppPage() {
           portfolio: enriched.map((h) => ({
             name: h.name,
             symbol: h.symbol,
+            currency: h.currency,
             category: h.category,
             institution: h.institution,
             valueEur: Math.round(h.currentValueEur),
@@ -277,11 +304,10 @@ export default function WealthAppPage() {
   return (
     <div
       style={{
-        paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))',
+        paddingBottom: 'calc(6.5rem + env(safe-area-inset-bottom))',
       }}
       className="min-h-screen bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-white"
     >
-      {/* En-tête fixe compatible Safe Area iPhone */}
       <header
         style={{
           paddingTop: 'max(0.85rem, env(safe-area-inset-top))',
@@ -428,7 +454,12 @@ export default function WealthAppPage() {
 
             <section className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold">Mes positions</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold">Mes positions</h2>
+                  <span className="inline-flex items-center gap-1 text-[10px] text-amber-500">
+                    <Clock className="w-3 h-3" /> = valeur manuelle / hors Yahoo
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -446,11 +477,22 @@ export default function WealthAppPage() {
                 return (
                   <div
                     key={item.id}
-                    className="rounded-2xl bg-white dark:bg-[#131823] p-3.5 border border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between"
+                    className="rounded-2xl bg-white dark:bg-[#131823] p-3.5 border border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-2"
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold">{item.name}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-bold truncate">{item.name}</span>
+                        {item.liveSource === 'manual' && (
+                          <span
+                            title="Non trouvé sur Yahoo Finance — valeur de secours utilisée"
+                            className="inline-flex items-center text-amber-500 shrink-0"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold">
+                          {item.currency}
+                        </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold">
                           {item.institution}
                         </span>
@@ -464,7 +506,7 @@ export default function WealthAppPage() {
                       </p>
                     </div>
 
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <p className="text-sm font-bold">
                         {item.currentValueEur.toLocaleString('fr-FR', {
                           maximumFractionDigits: 2,
@@ -484,6 +526,16 @@ export default function WealthAppPage() {
                 );
               })}
             </section>
+
+            {/* Taux de change utilisé en bas de la page Synthèse */}
+            <footer className="pt-1 pb-2 text-center">
+              <p className="text-[11px] text-slate-400">
+                Taux de change utilisé :{' '}
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  1 EUR = {eurUsdRate.toFixed(4)} USD
+                </span>
+              </p>
+            </footer>
           </>
         )}
 
@@ -536,17 +588,25 @@ export default function WealthAppPage() {
               {enriched.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-2xl bg-white dark:bg-[#131823] p-3.5 border border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between"
+                  className="rounded-2xl bg-white dark:bg-[#131823] p-3.5 border border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between gap-2"
                 >
-                  <div>
-                    <p className="text-sm font-bold">{item.name}</p>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-bold truncate">{item.name}</p>
+                      {item.liveSource === 'manual' && (
+                        <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      )}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold">
+                        {item.currency}
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-400">
                       {item.category} • {item.institution} • PRU{' '}
                       {item.buyPriceEur.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 shrink-0">
                     <span className="text-sm font-bold">
                       {item.currentValueEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €
                     </span>
@@ -667,7 +727,6 @@ export default function WealthAppPage() {
         )}
       </main>
 
-      {/* Barre de navigation basse */}
       <nav
         style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         className="fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-[#0D111A]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 pt-2"
@@ -722,6 +781,7 @@ export default function WealthAppPage() {
       <HoldingFormModal
         isOpen={modalOpen}
         initialHolding={editingHolding}
+        institutions={institutions}
         onClose={() => {
           setModalOpen(false);
           setEditingHolding(null);
@@ -732,6 +792,8 @@ export default function WealthAppPage() {
 
       <SettingsModal
         isOpen={settingsOpen}
+        institutions={institutions}
+        onUpdateInstitutions={persistInstitutions}
         onClose={() => setSettingsOpen(false)}
       />
     </div>

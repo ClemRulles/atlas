@@ -6,6 +6,8 @@ export type AssetCategory =
   | 'Cash'
   | 'Or / Matières premières';
 
+export type AssetCurrency = 'EUR' | 'USD';
+
 export type TimeframeKey = '1J' | '1S' | '1M' | 'YTD' | 'LTM' | '2A' | '5A' | '10A' | 'Tout';
 
 export interface PortfolioHolding {
@@ -13,6 +15,7 @@ export interface PortfolioHolding {
   name: string;
   category: AssetCategory;
   symbol?: string;
+  currency?: AssetCurrency;
   quantity: number;
   buyPriceEur: number;
   buyDate: string;
@@ -21,6 +24,7 @@ export interface PortfolioHolding {
 }
 
 export interface EnrichedHolding extends PortfolioHolding {
+  currency: AssetCurrency;
   currentPriceEur: number;
   currentValueEur: number;
   costBasisEur: number;
@@ -34,6 +38,8 @@ export interface EnrichedHolding extends PortfolioHolding {
 
 export interface MarketQuoteResult {
   symbol: string;
+  name?: string;
+  currency?: AssetCurrency;
   priceEur: number;
   previousCloseEur: number;
   history: { date: string; priceEur: number }[];
