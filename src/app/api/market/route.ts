@@ -18,8 +18,12 @@ interface ResolvedQuote {
 const BROWSER_HEADERS = {
   'User-Agent':
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  Accept: 'application/json',
+  Accept: 'application/json, text/html;q=0.9,*/*;q=0.8',
 };
+
+function isIsinCode(sym: string): boolean {
+  return /^[A-Z]{2}[A-Z0-9]{10}$/.test(sym.trim().toUpperCase());
+}
 
 function toTwelveDataSymbol(rawSym: string): string {
   const sym = rawSym.trim().toUpperCase();
@@ -78,13 +82,35 @@ function getYahooRangeAndInterval(timeframe: string): { range: string; interval:
   }
 }
 
+function getFtDaysBack(timeframe: string): number {
+  switch (timeframe) {
+    case '1S':
+      return 14;
+    case '1M':
+      return 35;
+    case 'YTD':
+      return 330;
+    case 'LTM':
+      return 366;
+    case '2A':
+      return 730;
+    case '5A':
+      return 1825;
+    case '10A':
+      return 3650;
+    case 'Tout':
+    default:
+      return 3650;
+  }
+}
+
 async function fetchFromTwelveData(
   origSym: string,
   timeframe: string,
   apiKey: string,
   eurUsdRate: number
 ): Promise<ResolvedQuote | null> {
-  if (/^[A-Z]{2}[A-Z0-9]{10}$/.test(origSym)) return null;
+  if (isIsinCode(origSym)) return null;
   const tdSym = toTwelveDataSymbol(origSym);
   const { interval, outputsize } = getTwelveDataParams(timeframe);
 
@@ -219,6 +245,138 @@ async function fetchFromYahooDirect(
   }
 }
 
+async function fetchFromFinancialTimes(
+  isin: string,
+  timeframe: string,
+  eurUsdRate: number
+): Promise<ResolvedQuote | null> {
+  if (!isIsinCode(isin)) return null;
+
+  const currenciesToTry: Array<'EUR' | 'USD'> = ['EUR', 'USD'];
+  const daysBack = getFtDaysBack(timeframe);
+
+  for (const cur of currenciesToTry) {
+    const ftSymbol = `${isin}:${cur}`;
+    const toEur = (val: number) => (cur === 'USD' ? val / eurUsdRate : val);
+
+    // 1. Appel à l'API graphique interne de Financial Times (série historique + VL)
+    try {
+      const chartRes = await fetch('https://markets.ft.com/data/chartapi/series', {
+        method: 'POST',
+        headers: {
+          ...BROWSER_HEADERS,
+          'Content-Type': 'application/json',
+          Origin: 'https://markets.ft.com',
+          Referer: `https://markets.ft.com/data/funds/tearsheet/charts?s=${encodeURIComponent(
+            ftSymbol
+          )}`,
+        },
+        body: JSON.stringify({
+          days: daysBack,
+          dataNormalized: false,
+          dataPeriod: 'Day',
+          dataInterval: 1,
+          realtime: false,
+          yFormat: '0.###',
+          timeServiceFormat: 'JSON',
+          returnDateType: 'ISO8601',
+          elements: [
+            {
+              Label: ftSymbol,
+              Type: 'price',
+              Symbol: ftSymbol,
+              OverlayIndicators: [],
+              Params: {},
+            },
+          ],
+        }),
+        cache: 'no-store',
+      });
+
+      if (chartRes.ok) {
+        const chartJson = await chartRes.json();
+        const dates: string[] = Array.isArray(chartJson?.Dates) ? chartJson.Dates : [];
+        const values: Array<number | null> =
+          chartJson?.Elements?.[0]?.ComponentSeries?.[0]?.Values || [];
+        const fundName = String(chartJson?.Elements?.[0]?.CompanyName || isin);
+
+        const history: MarketPoint[] = [];
+        for (let i = 0; i < Math.min(dates.length, values.length); i++) {
+          const v = values[i];
+          if (typeof v === 'number' && v > 0 && dates[i]) {
+            history.push({
+              date: String(dates[i]).slice(0, 10),
+              priceEur: Number(toEur(v).toFixed(4)),
+            });
+          }
+        }
+
+        if (history.length > 0) {
+          const latest = history[history.length - 1];
+          const prev = history.length > 1 ? history[history.length - 2] : latest;
+          return {
+            symbol: isin,
+            name: fundName,
+            currency: cur,
+            priceEur: latest.priceEur,
+            previousCloseEur: prev.priceEur,
+            history,
+            source: 'yahoo',
+          };
+        }
+      }
+    } catch {
+      // Passe à la lecture de la fiche résumé FT
+    }
+
+    // 2. Lecture de la valeur liquidative sur la fiche résumé Financial Times
+    try {
+      const summaryUrl = `https://markets.ft.com/data/funds/tearsheet/summary?s=${encodeURIComponent(
+        ftSymbol
+      )}`;
+      const htmlRes = await fetch(summaryUrl, {
+        headers: BROWSER_HEADERS,
+        cache: 'no-store',
+      });
+
+      if (htmlRes.ok) {
+        const html = await htmlRes.text();
+        const priceMatch =
+          html.match(/Price\s*\([A-Z]{3}\)<\/span>\s*<span[^>]*>([\d,]+(?:\.\d+)?)/i) ||
+          html.match(/mod-ui-data-list__value">([\d,]+(?:\.\d+)?)<\/span>/i);
+
+        if (priceMatch && priceMatch[1]) {
+          const parsedPrice = parseFloat(priceMatch[1].replace(/,/g, ''));
+          if (!Number.isNaN(parsedPrice) && parsedPrice > 0) {
+            const priceEur = Number(toEur(parsedPrice).toFixed(4));
+            const titleMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+            const fundName = titleMatch ? titleMatch[1].trim() : isin;
+
+            return {
+              symbol: isin,
+              name: fundName,
+              currency: cur,
+              priceEur,
+              previousCloseEur: priceEur,
+              history: [
+                {
+                  date: new Date().toISOString().slice(0, 10),
+                  priceEur,
+                },
+              ],
+              source: 'yahoo',
+            };
+          }
+        }
+      }
+    } catch {
+      // Essaie la devise suivante
+    }
+  }
+
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -275,7 +433,7 @@ export async function POST(req: NextRequest) {
 
     const quotes: Record<string, ResolvedQuote> = {};
 
-    // 2. Cascade : Twelve Data -> Yahoo Chart direct -> (repli manuel client si introuvable)
+    // 2. Cascade : Twelve Data -> Yahoo Chart direct -> Financial Times (ISIN fonds) -> Repli manuel
     await Promise.all(
       symbols.map(async (rawSym) => {
         const origSym = rawSym.trim().toUpperCase();
@@ -283,10 +441,19 @@ export async function POST(req: NextRequest) {
 
         let resolved: ResolvedQuote | null = null;
 
-        if (apiKey) {
+        if (apiKey && !isIsinCode(origSym)) {
           resolved = await fetchFromTwelveData(origSym, timeframe, apiKey, eurUsdRate);
         }
 
+        if (!resolved && !isIsinCode(origSym)) {
+          resolved = await fetchFromYahooDirect(origSym, timeframe, eurUsdRate);
+        }
+
+        if (!resolved && isIsinCode(origSym)) {
+          resolved = await fetchFromFinancialTimes(origSym, timeframe, eurUsdRate);
+        }
+
+        // Dernier essai Yahoo si un ISIN est reconnu par Yahoo
         if (!resolved) {
           resolved = await fetchFromYahooDirect(origSym, timeframe, eurUsdRate);
         }
