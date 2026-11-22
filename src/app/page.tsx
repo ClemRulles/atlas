@@ -70,6 +70,7 @@ export default function WealthAppPage() {
   const [institutions, setInstitutions] = useState<string[]>(DEFAULT_INSTITUTIONS);
 
   const quotesCacheRef = useRef<Partial<Record<TimeframeKey, Record<string, MarketQuoteResult>>>>({});
+  const liveStatusRef = useRef<Record<string, { isLive: boolean; lastPriceEur?: number }>>({});
   const [quotes, setQuotes] = useState<Record<string, MarketQuoteResult>>({});
   const [eurUsdRate, setEurUsdRate] = useState<number>(1.0968);
   const [loadingQuotes, setLoadingQuotes] = useState<boolean>(false);
@@ -125,6 +126,7 @@ export default function WealthAppPage() {
 
   const persistHoldings = (next: PortfolioHolding[]) => {
     quotesCacheRef.current = {};
+    liveStatusRef.current = {};
     setHoldings(next);
     try {
       localStorage.setItem(HOLDINGS_STORAGE_KEY, JSON.stringify(next));
@@ -139,11 +141,12 @@ export default function WealthAppPage() {
       }
 
       setLoadingQuotes(true);
-      const { quotes: q, eurUsdRate: fxRate } = await fetchQuotesForHoldings(
-        items,
-        tf,
-        clientNow
-      );
+      const {
+        quotes: q,
+        eurUsdRate: fxRate,
+        updatedLiveStatus,
+      } = await fetchQuotesForHoldings(items, tf, clientNow, liveStatusRef.current);
+      liveStatusRef.current = updatedLiveStatus;
       quotesCacheRef.current[tf] = q;
       setQuotes(q);
       setEurUsdRate(fxRate);
@@ -163,7 +166,7 @@ export default function WealthAppPage() {
     [holdings, quotes, timeframe, clientNow]
   );
 
-  const series = useMemo(() => buildPortfolioSeries(enriched), [enriched]);
+  const series = useMemo(() => buildPortfolioSeries(enriched, timeframe, clientNow), [enriched, timeframe, clientNow]);
 
   const totalValueEur = useMemo(
     () => enriched.reduce((sum, h) => sum + h.currentValueEur, 0),
@@ -520,31 +523,35 @@ export default function WealthAppPage() {
               </div>
             </section>
 
-            {/* Case Capital investi réduite (4 cols) et Plus-value latente élargie (8 cols) sur une seule ligne */}
+            {/* Case Capital investi et Plus-value latente (titre centré, valeurs centrées dans chaque moitié, chiffres agrandis) */}
             <section className="grid grid-cols-12 gap-2.5">
-              <div className="col-span-4 rounded-2xl bg-white dark:bg-[#131823] px-3 py-3.5 border border-slate-200/70 dark:border-slate-800/80 min-w-0">
-                <span className="block text-[11px] text-slate-400 truncate">Capital investi</span>
-                <p className="text-sm font-bold mt-1 truncate">
+              <div className="col-span-5 rounded-2xl bg-white dark:bg-[#131823] px-3 py-3.5 border border-slate-200/70 dark:border-slate-800/80 min-w-0 flex flex-col justify-center">
+                <span className="block text-[11px] text-slate-400 text-center truncate">
+                  Capital investi
+                </span>
+                <p className="text-base font-extrabold mt-1 text-center truncate">
                   {formatMoney(totalCostEur, 'EUR', 2)}
                 </p>
               </div>
-              <div className="col-span-8 rounded-2xl bg-white dark:bg-[#131823] px-3.5 py-3.5 border border-slate-200/70 dark:border-slate-800/80 min-w-0">
-                <span className="block text-[11px] text-slate-400 truncate">Plus-value latente</span>
-                <div className="mt-1 flex items-baseline gap-1.5 whitespace-nowrap overflow-hidden">
+              <div className="col-span-7 rounded-2xl bg-white dark:bg-[#131823] px-3 py-3.5 border border-slate-200/70 dark:border-slate-800/80 min-w-0 flex flex-col justify-center">
+                <span className="block text-[11px] text-slate-400 text-center truncate">
+                  Plus-value latente
+                </span>
+                <div className="mt-1 grid grid-cols-2 items-baseline divide-x divide-slate-200/70 dark:divide-slate-800">
                   <span
-                    className={`text-sm font-bold ${
+                    className={`text-base font-extrabold text-center px-1 truncate ${
                       totalPnlEur >= 0 ? 'text-emerald-500' : 'text-rose-500'
                     }`}
                   >
                     {formatSignedMoney(totalPnlEur, 'EUR', 2)}
                   </span>
                   <span
-                    className={`text-xs font-semibold ${
+                    className={`text-base font-extrabold text-center px-1 truncate ${
                       totalPnlEur >= 0 ? 'text-emerald-500' : 'text-rose-500'
                     }`}
                   >
-                    ({totalPnlPct >= 0 ? '+' : ''}
-                    {totalPnlPct.toFixed(1)}%)
+                    {totalPnlPct >= 0 ? '+' : ''}
+                    {totalPnlPct.toFixed(1)}%
                   </span>
                 </div>
               </div>

@@ -6,7 +6,7 @@ import {
   TimeframeKey,
 } from '@/types/portfolio';
 
-function getStartDateForTimeframe(
+export function getStartDateForTimeframe(
   tf: TimeframeKey,
   earliestBuyDate: string,
   refDate: Date
@@ -73,10 +73,14 @@ function buildIntradayFallback(
 function buildFallbackQuote(
   holding: PortfolioHolding,
   timeframe: TimeframeKey,
-  refDate: Date
+  refDate: Date,
+  forcedSource: 'yahoo' | 'manual' = 'manual',
+  overrideEndPrice?: number
 ): MarketQuoteResult {
   const endPrice =
-    holding.manualCurrentPriceEur && holding.manualCurrentPriceEur > 0
+    overrideEndPrice && overrideEndPrice > 0
+      ? overrideEndPrice
+      : holding.manualCurrentPriceEur && holding.manualCurrentPriceEur > 0
       ? holding.manualCurrentPriceEur
       : holding.buyPriceEur > 0
       ? holding.buyPriceEur
@@ -90,7 +94,7 @@ function buildFallbackQuote(
       priceEur: endPrice,
       previousCloseEur: intraday[0].priceEur,
       history: intraday,
-      source: 'manual',
+      source: forcedSource,
     };
   }
 
@@ -129,15 +133,20 @@ function buildFallbackQuote(
     priceEur: endPrice,
     previousCloseEur: prevPrice,
     history: points,
-    source: 'manual',
+    source: forcedSource,
   };
 }
 
 export async function fetchQuotesForHoldings(
   holdings: PortfolioHolding[],
   timeframe: TimeframeKey,
-  refDate: Date = new Date('2026-11-22T00:00:00Z')
-): Promise<{ quotes: Record<string, MarketQuoteResult>; eurUsdRate: number }> {
+  refDate: Date = new Date('2026-11-22T00:00:00Z'),
+  knownLiveStatus: Record<string, { isLive: boolean; lastPriceEur?: number }> = {}
+): Promise<{
+  quotes: Record<string, MarketQuoteResult>;
+  eurUsdRate: number;
+  updatedLiveStatus: Record<string, { isLive: boolean; lastPriceEur?: number }>;
+}> {
   const symbols = Array.from(
     new Set(
       holdings
@@ -169,26 +178,44 @@ export async function fetchQuotesForHoldings(
   }
 
   const result: Record<string, MarketQuoteResult> = {};
+  const updatedLiveStatus = { ...knownLiveStatus };
 
   for (const h of holdings) {
     if (h.category === 'Cash') {
-      result[h.id] = buildFallbackQuote(h, timeframe, refDate);
+      result[h.id] = buildFallbackQuote(h, timeframe, refDate, 'manual');
       continue;
     }
 
     const symKey = (h.symbol || '').trim().toUpperCase();
     const live = serverMap[symKey] || serverMap[(h.symbol || '').trim()];
-    if (live && live.priceEur > 0 && live.history && live.history.length >= 2) {
-      result[h.id] = {
-        ...live,
-        currency: (h.currency || live.currency || 'EUR') as AssetCurrency,
-      };
+    const prevKnown = updatedLiveStatus[h.id];
+
+    if (live && live.priceEur > 0) {
+      updatedLiveStatus[h.id] = { isLive: true, lastPriceEur: live.priceEur };
+      if (live.history && live.history.length >= 2) {
+        result[h.id] = {
+          ...live,
+          currency: (h.currency || live.currency || 'EUR') as AssetCurrency,
+          source: 'yahoo',
+        };
+      } else {
+        result[h.id] = buildFallbackQuote(h, timeframe, refDate, 'yahoo', live.priceEur);
+      }
+    } else if (prevKnown?.isLive) {
+      // Conserve le statut live stable même si une période intraday n'a pas renvoyé de bougies
+      result[h.id] = buildFallbackQuote(
+        h,
+        timeframe,
+        refDate,
+        'yahoo',
+        prevKnown.lastPriceEur
+      );
     } else {
-      result[h.id] = buildFallbackQuote(h, timeframe, refDate);
+      result[h.id] = buildFallbackQuote(h, timeframe, refDate, 'manual');
     }
   }
 
-  return { quotes: result, eurUsdRate };
+  return { quotes: result, eurUsdRate, updatedLiveStatus };
 }
 
 export function enrichHoldings(
@@ -206,7 +233,7 @@ export function enrichHoldings(
   const startDate = getStartDateForTimeframe(timeframe, earliestBuy, refDate);
 
   return holdings.map((h) => {
-    const q = quotes[h.id] || buildFallbackQuote(h, timeframe, refDate);
+    const q = quotes[h.id] || buildFallbackQuote(h, timeframe, refDate, 'manual');
     const currency: AssetCurrency = h.currency || q.currency || 'EUR';
     const currentPriceEur = q.priceEur;
     const currentValueEur = currentPriceEur * h.quantity;
@@ -256,53 +283,88 @@ export function enrichHoldings(
   });
 }
 
-export function buildPortfolioSeries(enriched: EnrichedHolding[]) {
+function interpolateValueAtTimestamp(
+  parsedPoints: { ts: number; valueEur: number }[],
+  targetTs: number,
+  fallbackVal: number
+): number {
+  if (parsedPoints.length === 0) return fallbackVal;
+  if (targetTs <= parsedPoints[0].ts) return parsedPoints[0].valueEur;
+  const last = parsedPoints[parsedPoints.length - 1];
+  if (targetTs >= last.ts) return last.valueEur;
+
+  for (let i = 0; i < parsedPoints.length - 1; i++) {
+    const p0 = parsedPoints[i];
+    const p1 = parsedPoints[i + 1];
+    if (targetTs >= p0.ts && targetTs <= p1.ts) {
+      const span = p1.ts - p0.ts;
+      if (span <= 0) return p1.valueEur;
+      const ratio = (targetTs - p0.ts) / span;
+      return p0.valueEur + (p1.valueEur - p0.valueEur) * ratio;
+    }
+  }
+  return last.valueEur;
+}
+
+export function buildPortfolioSeries(
+  enriched: EnrichedHolding[],
+  timeframe: TimeframeKey = 'LTM',
+  refDate: Date = new Date('2026-11-22T00:00:00Z')
+) {
   if (enriched.length === 0) {
     return [{ date: '2026-11-22', valueEur: 0 }];
   }
 
-  const allDatesSet = new Set<string>();
-  for (const item of enriched) {
-    for (const pt of item.history) {
-      allDatesSet.add(pt.date);
-    }
-  }
+  const fallbackDateStr = refDate.toISOString().slice(0, 10);
+  const earliestBuy = enriched.reduce(
+    (min, h) => (h.buyDate < min ? h.buyDate : min),
+    enriched[0].buyDate || fallbackDateStr
+  );
 
-  const sortedDates = Array.from(allDatesSet).sort();
-  if (sortedDates.length === 0) {
-    const total = enriched.reduce((acc, item) => acc + item.currentValueEur, 0);
-    return [{ date: '2026-11-22', valueEur: Number(total.toFixed(2)) }];
-  }
+  const startDt = getStartDateForTimeframe(timeframe, earliestBuy, refDate);
+  const endDt = new Date(refDate);
+  const startTs = startDt.getTime();
+  const endTs = Math.max(startTs + 3600 * 1000, endDt.getTime());
 
-  const maxPoints = 120;
-  const sampledDates =
-    sortedDates.length <= maxPoints
-      ? sortedDates
-      : Array.from({ length: maxPoints }, (_, i) => {
-          const idx = Math.round((i / (maxPoints - 1)) * (sortedDates.length - 1));
-          return sortedDates[idx];
-        });
+  const steps = timeframe === '1J' ? 24 : 90;
 
-  return sampledDates.map((date) => {
-    let totalOnDate = 0;
-    for (const item of enriched) {
-      if (item.history.length === 0) {
-        totalOnDate += item.currentValueEur;
-        continue;
-      }
-      let chosen = item.history[0].valueEur;
-      for (let i = 0; i < item.history.length; i++) {
-        if (item.history[i].date <= date) {
-          chosen = item.history[i].valueEur;
-        } else {
-          break;
-        }
-      }
-      totalOnDate += chosen;
-    }
-    return {
-      date,
-      valueEur: Number(totalOnDate.toFixed(2)),
-    };
+  const preparedHoldings = enriched.map((item) => {
+    const parsed = item.history
+      .map((pt) => {
+        const iso = pt.date.includes(' ') ? pt.date.replace(' ', 'T') + ':00Z' : pt.date + 'T00:00:00Z';
+        const ts = new Date(iso).getTime();
+        return Number.isNaN(ts) ? null : { ts, valueEur: pt.valueEur };
+      })
+      .filter(Boolean) as { ts: number; valueEur: number }[];
+    parsed.sort((a, b) => a.ts - b.ts);
+    return { item, parsed };
   });
+
+  const series: { date: string; valueEur: number }[] = [];
+
+  for (let i = 0; i <= steps; i++) {
+    const ratio = i / steps;
+    const ts = startTs + ratio * (endTs - startTs);
+    const dt = new Date(ts);
+    const label =
+      timeframe === '1J'
+        ? `${dt.toISOString().slice(0, 10)} ${dt.toTimeString().slice(0, 5)}`
+        : dt.toISOString().slice(0, 10);
+
+    let total = 0;
+    for (const { item, parsed } of preparedHoldings) {
+      if (i === steps) {
+        total += item.currentValueEur;
+      } else {
+        total += interpolateValueAtTimestamp(parsed, ts, item.currentValueEur);
+      }
+    }
+
+    series.push({
+      date: label,
+      valueEur: Number(total.toFixed(2)),
+    });
+  }
+
+  return series;
 }
