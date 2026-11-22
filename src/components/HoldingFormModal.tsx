@@ -1,9 +1,17 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Sparkles, Trash2, X } from 'lucide-react';
-import { DEFAULT_INSTITUTIONS, TICKER_SUGGESTIONS } from '@/data/initialPortfolio';
+import { Loader2, Sparkles, Trash2, X } from 'lucide-react';
+import { DEFAULT_INSTITUTIONS } from '@/data/initialPortfolio';
 import { AssetCategory, AssetCurrency, PortfolioHolding } from '@/types/portfolio';
+
+interface SearchSuggestion {
+  symbol: string;
+  name: string;
+  category: AssetCategory;
+  currency: AssetCurrency;
+  exchange?: string;
+}
 
 interface HoldingFormModalProps {
   isOpen: boolean;
@@ -41,6 +49,8 @@ export default function HoldingFormModal({
   const [institution, setInstitution] = useState<string>(institutions[0] || 'Trade Republic');
   const [manualCurrentPriceEur, setManualCurrentPriceEur] = useState<string>('');
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+  const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
+  const [searching, setSearching] = useState<boolean>(false);
 
   const availableInstitutions = useMemo(() => {
     const base = institutions.length > 0 ? institutions : DEFAULT_INSTITUTIONS;
@@ -66,6 +76,7 @@ export default function HoldingFormModal({
           : ''
       );
       setShowSuggestions(false);
+      setSuggestions([]);
     } else {
       setCategory('Actions');
       setName('');
@@ -77,19 +88,40 @@ export default function HoldingFormModal({
       setInstitution(availableInstitutions[0] || 'Trade Republic');
       setManualCurrentPriceEur('');
       setShowSuggestions(false);
+      setSuggestions([]);
     }
   }, [initialHolding, isOpen, availableInstitutions]);
 
-  const filteredSuggestions = useMemo(() => {
-    const query = symbol.trim().toLowerCase();
-    if (!query) {
-      return TICKER_SUGGESTIONS.filter((s) => s.category === category).slice(0, 5);
+  useEffect(() => {
+    if (!isOpen || category === 'Cash') return;
+    const query = symbol.trim();
+    if (query.length < 1) {
+      setSuggestions([]);
+      setSearching(false);
+      return;
     }
-    return TICKER_SUGGESTIONS.filter(
-      (s) =>
-        s.symbol.toLowerCase().includes(query) || s.name.toLowerCase().includes(query)
-    ).slice(0, 6);
-  }, [symbol, category]);
+
+    let cancelled = false;
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/market/search?q=${encodeURIComponent(query)}`);
+        if (!cancelled && res.ok) {
+          const data = await res.json();
+          setSuggestions(Array.isArray(data.results) ? data.results : []);
+        }
+      } catch {
+        if (!cancelled) setSuggestions([]);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [symbol, category, isOpen]);
 
   if (!isOpen) return null;
 
@@ -100,17 +132,15 @@ export default function HoldingFormModal({
       setQuantity('1');
       setCurrency('EUR');
       setShowSuggestions(false);
+      setSuggestions([]);
     }
   };
 
-  const handleSelectSuggestion = (item: (typeof TICKER_SUGGESTIONS)[number]) => {
+  const handleSelectSuggestion = (item: SearchSuggestion) => {
     setSymbol(item.symbol);
     setName(item.name);
     setCategory(item.category);
     setCurrency(item.currency);
-    if (item.fallbackPriceEur) {
-      setManualCurrentPriceEur(String(item.fallbackPriceEur));
-    }
     setShowSuggestions(false);
   };
 
@@ -188,27 +218,30 @@ export default function HoldingFormModal({
 
           {category !== 'Cash' && (
             <div className="relative">
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                Ticker ou code ISIN (autocomplétion)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Ticker, nom d’entreprise ou ISIN (recherche mondiale)
+                </label>
+                {searching && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />}
+              </div>
               <input
                 type="text"
-                placeholder="Ex. AAPL, NVDA, BNP.PA, BE0167243154..."
+                placeholder="Tapez VISA, LVMH, AAPL, IWDA, Bitcoin..."
                 value={symbol}
                 onFocus={() => setShowSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowSuggestions(false), 160)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 180)}
                 onChange={(e) => {
                   setSymbol(e.target.value);
                   setShowSuggestions(true);
                 }}
-                className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500 uppercase"
+                className="w-full rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500"
               />
 
-              {showSuggestions && filteredSuggestions.length > 0 && (
+              {showSuggestions && suggestions.length > 0 && (
                 <div className="mt-1.5 rounded-2xl bg-white dark:bg-[#0D111A] border border-slate-200 dark:border-slate-700 shadow-lg overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredSuggestions.map((sug) => (
+                  {suggestions.map((sug) => (
                     <button
-                      key={sug.symbol}
+                      key={`${sug.symbol}-${sug.exchange || ''}`}
                       type="button"
                       onMouseDown={() => handleSelectSuggestion(sug)}
                       className="w-full px-3.5 py-2.5 text-left flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/70 transition"
@@ -220,7 +253,10 @@ export default function HoldingFormModal({
                           </span>
                           <span className="text-xs font-medium truncate">{sug.name}</span>
                         </div>
-                        <span className="text-[10px] text-slate-400">{sug.category}</span>
+                        <span className="text-[10px] text-slate-400">
+                          {sug.category}
+                          {sug.exchange ? ` • ${sug.exchange}` : ''}
+                        </span>
                       </div>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
                         {sug.currency}
@@ -239,7 +275,7 @@ export default function HoldingFormModal({
               </label>
               {category !== 'Cash' && (
                 <span className="inline-flex items-center gap-1 text-[10px] text-sky-500">
-                  <Sparkles className="w-3 h-3" /> Auto-rempli via ticker
+                  <Sparkles className="w-3 h-3" /> Auto-rempli via recherche
                 </span>
               )}
             </div>
@@ -330,7 +366,7 @@ export default function HoldingFormModal({
           {category !== 'Cash' && (
             <div>
               <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
-                Valeur actuelle unitaire en € (secours si absent sur Yahoo)
+                Valeur actuelle unitaire en € (secours si absent sur Twelve Data & Yahoo)
               </label>
               <input
                 type="number"
@@ -343,7 +379,6 @@ export default function HoldingFormModal({
             </div>
           )}
 
-          {/* Grille séparée sans chevauchement sur mobile */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div className="min-w-0">
               <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">

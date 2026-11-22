@@ -14,9 +14,6 @@ export function getStartDateForTimeframe(
   const now = new Date(refDate);
   const d = new Date(now);
   switch (tf) {
-    case '1J':
-      d.setHours(now.getHours() - 24);
-      return d;
     case '1S':
       d.setDate(now.getDate() - 7);
       return d;
@@ -47,32 +44,8 @@ export function getStartDateForTimeframe(
   }
 }
 
-function buildIntradayFallback(
-  holding: PortfolioHolding,
-  endPrice: number,
-  refDate: Date
-): { date: string; priceEur: number }[] {
-  const isCash = holding.category === 'Cash';
-  const points: { date: string; priceEur: number }[] = [];
-  const steps = 24;
-  const now = new Date(refDate);
-
-  for (let i = steps; i >= 0; i--) {
-    const dt = new Date(now.getTime() - i * 3600 * 1000);
-    const label = `${dt.toISOString().slice(0, 10)} ${dt.toTimeString().slice(0, 5)}`;
-    const wave = isCash ? 0 : Math.sin(i / 4) * (endPrice * 0.004);
-    const price = i === 0 ? endPrice : Math.max(0.01, endPrice + wave);
-    points.push({
-      date: label,
-      priceEur: Number(price.toFixed(4)),
-    });
-  }
-  return points;
-}
-
 function buildFallbackQuote(
   holding: PortfolioHolding,
-  timeframe: TimeframeKey,
   refDate: Date,
   forcedSource: 'yahoo' | 'manual' = 'manual',
   overrideEndPrice?: number
@@ -85,18 +58,6 @@ function buildFallbackQuote(
       : holding.buyPriceEur > 0
       ? holding.buyPriceEur
       : 100;
-
-  if (timeframe === '1J') {
-    const intraday = buildIntradayFallback(holding, endPrice, refDate);
-    return {
-      symbol: holding.symbol || holding.name,
-      currency: holding.currency || 'EUR',
-      priceEur: endPrice,
-      previousCloseEur: intraday[0].priceEur,
-      history: intraday,
-      source: forcedSource,
-    };
-  }
 
   const startPrice = holding.buyPriceEur > 0 ? holding.buyPriceEur : endPrice;
   const isCash = holding.category === 'Cash';
@@ -182,7 +143,7 @@ export async function fetchQuotesForHoldings(
 
   for (const h of holdings) {
     if (h.category === 'Cash') {
-      result[h.id] = buildFallbackQuote(h, timeframe, refDate, 'manual');
+      result[h.id] = buildFallbackQuote(h, refDate, 'manual');
       continue;
     }
 
@@ -199,19 +160,17 @@ export async function fetchQuotesForHoldings(
           source: 'yahoo',
         };
       } else {
-        result[h.id] = buildFallbackQuote(h, timeframe, refDate, 'yahoo', live.priceEur);
+        result[h.id] = buildFallbackQuote(h, refDate, 'yahoo', live.priceEur);
       }
     } else if (prevKnown?.isLive) {
-      // Conserve le statut live stable même si une période intraday n'a pas renvoyé de bougies
       result[h.id] = buildFallbackQuote(
         h,
-        timeframe,
         refDate,
         'yahoo',
         prevKnown.lastPriceEur
       );
     } else {
-      result[h.id] = buildFallbackQuote(h, timeframe, refDate, 'manual');
+      result[h.id] = buildFallbackQuote(h, refDate, 'manual');
     }
   }
 
@@ -233,7 +192,7 @@ export function enrichHoldings(
   const startDate = getStartDateForTimeframe(timeframe, earliestBuy, refDate);
 
   return holdings.map((h) => {
-    const q = quotes[h.id] || buildFallbackQuote(h, timeframe, refDate, 'manual');
+    const q = quotes[h.id] || buildFallbackQuote(h, refDate, 'manual');
     const currency: AssetCurrency = h.currency || q.currency || 'EUR';
     const currentPriceEur = q.priceEur;
     const currentValueEur = currentPriceEur * h.quantity;
@@ -241,11 +200,7 @@ export function enrichHoldings(
     const pnlEur = currentValueEur - costBasisEur;
     const pnlPercent = costBasisEur > 0 ? (pnlEur / costBasisEur) * 100 : 0;
 
-    const filteredHistory =
-      timeframe === '1J'
-        ? q.history
-        : q.history.filter((pt) => new Date(pt.date) >= startDate);
-
+    const filteredHistory = q.history.filter((pt) => new Date(pt.date) >= startDate);
     const effectiveHistory = filteredHistory.length >= 2 ? filteredHistory : q.history;
     const basePoint =
       effectiveHistory.length > 0 ? effectiveHistory[0].priceEur * h.quantity : currentValueEur;
@@ -326,13 +281,12 @@ export function buildPortfolioSeries(
   const startTs = startDt.getTime();
   const endTs = Math.max(startTs + 3600 * 1000, endDt.getTime());
 
-  const steps = timeframe === '1J' ? 24 : 90;
+  const steps = 90;
 
   const preparedHoldings = enriched.map((item) => {
     const parsed = item.history
       .map((pt) => {
-        const iso = pt.date.includes(' ') ? pt.date.replace(' ', 'T') + ':00Z' : pt.date + 'T00:00:00Z';
-        const ts = new Date(iso).getTime();
+        const ts = new Date(pt.date.slice(0, 10) + 'T00:00:00Z').getTime();
         return Number.isNaN(ts) ? null : { ts, valueEur: pt.valueEur };
       })
       .filter(Boolean) as { ts: number; valueEur: number }[];
@@ -346,10 +300,7 @@ export function buildPortfolioSeries(
     const ratio = i / steps;
     const ts = startTs + ratio * (endTs - startTs);
     const dt = new Date(ts);
-    const label =
-      timeframe === '1J'
-        ? `${dt.toISOString().slice(0, 10)} ${dt.toTimeString().slice(0, 5)}`
-        : dt.toISOString().slice(0, 10);
+    const label = dt.toISOString().slice(0, 10);
 
     let total = 0;
     for (const { item, parsed } of preparedHoldings) {

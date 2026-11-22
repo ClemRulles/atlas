@@ -44,7 +44,7 @@ import {
 
 const HOLDINGS_STORAGE_KEY = 'wealthview_holdings_v5';
 const INSTITUTIONS_STORAGE_KEY = 'wealthview_institutions_v1';
-const TIMEFRAMES: TimeframeKey[] = ['1J', '1S', '1M', 'YTD', 'LTM', '2A', '5A', '10A', 'Tout'];
+const TIMEFRAMES: TimeframeKey[] = ['1S', '1M', 'YTD', 'LTM', '2A', '5A', '10A', 'Tout'];
 
 type TabKey = 'synthese' | 'portefeuille' | 'actus' | 'conseiller';
 
