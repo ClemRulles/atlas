@@ -17,9 +17,31 @@ Trois pages, trois questions :
 | 1 | Direction artistique, structure, navigation, mode démo | Fait : direction « Nuit boréale » validée, trois pages en mode démo, navigation, mode discret |
 | 2 | Saisie des positions, cours réels, graphe d'évolution | Fait : recherche par nom/ticker/ISIN, achat et vente, import CSV, cours Yahoo, courbe réelle, dépenses, sauvegarde JSON |
 | 3 | Composition des ETF, page « Ce que tu possèdes » | Fait : compositions (Yahoo par défaut, Eulerpool/FMP/Finnhub en option), ETF traversés dans la phrase du jour, actualités et dates de résultats |
-| 4 | Laboratoire « Et si » | À faire |
-| 5 | IA : phrase du jour, chat, import par capture d'écran | À faire |
-| 6 | PWA, finitions, déploiement Vercel | À faire |
+| 4 | Laboratoire « Et si » | Fait : simulateur Monte Carlo en cône avec paliers, crises 2008/Covid/2022, jumeau paresseux, avant d'acheter, choc sur mesure, journal de convictions |
+| 5 | Chat et import par capture d'écran (sans IA) | Reportée. La phrase du jour, elle, est déjà faite sans IA |
+| 6 | PWA, finitions, déploiement Vercel | Fait : installable sur iPhone (manifeste, icônes, plein écran), ouverture hors ligne avec les derniers cours, déploiement par Vercel à chaque push |
+
+## Installer sur iPhone
+
+Ouvrir l'adresse Vercel dans Safari, puis Partager → « Sur l'écran d'accueil ». Atlas s'ouvre alors en plein écran, comme une app, et reste consultable hors ligne avec les derniers cours connus.
+
+## Déployer sur Vercel
+
+1. Vercel → Add New → Project → importer ce dépôt GitHub (préréglage Next.js, aucun réglage à changer).
+2. Aucune variable d'environnement n'est obligatoire. Pour les compositions complètes d'ETF : ajouter `EULERPOOL_API_KEY` (clé gratuite).
+3. Chaque push sur `main` redéploie automatiquement.
+
+## Le laboratoire « Et si »
+
+Calculs dans `src/lib/lab/lab.ts`, testés. Tous illustratifs :
+
+| Outil | Méthode |
+|---|---|
+| Simulateur du futur | 1 500 trajectoires mensuelles log-normales ; profils prudent 3 %/7 %, équilibré 5 %/12 %, dynamique 7 %/17 % (rendement médian / volatilité annuels) ; cône 10e–90e centile ; paliers des morceaux de vie sur le scénario médian |
+| Rejouer les crises | Chaque ligne suit un indice (S&P 500, Nasdaq 100, Euro Stoxx 50, EEM, ou « monde » = 75 % S&P 500 + 25 % Euro Stoxx 50) depuis le sommet d'avant crise ; sans devises ni dividendes |
+| Jumeau paresseux | Chaque euro versé ou retiré, aux mêmes dates, placé dans iShares Core MSCI World (IWDA.AS) |
+| Avant d'acheter | Avant/après sur secteurs, pays, poids des dix premières entreprises, recouvrement avec les fonds détenus |
+| Choc sur mesure | Effet direct : la part exposée (ETF traversés) perd la baisse choisie ; l'exposition inconnue est affichée |
 
 ## Lancer le projet
 
