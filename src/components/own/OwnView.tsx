@@ -16,10 +16,11 @@ import { haptic, SERIES_COLORS } from "@/lib/ui";
 const ease = [0.16, 1, 0.3, 1] as const;
 
 export function OwnView() {
-  const { snapshot, mode, data } = useAtlas();
+  const { snapshot, mode, data, market } = useAtlas();
   const [company, setCompany] = useState<CompanyExposure | null>(null);
   if (!snapshot || !data) return <PageSkeleton />;
   if (mode === "real" && snapshot.lines.length === 0) return <EmptyPortfolio question="Qu'est-ce que je possède vraiment ?" />;
+  if (mode === "real" && market.loading && snapshot.lines.every((l) => l.valued.valueEUR === null)) return <PageSkeleton label="Récupération des cours…" />;
   const { instruments } = data;
 
   return (
@@ -59,13 +60,21 @@ function Hero({ snapshot, instruments }: { snapshot: Snapshot; instruments: Reco
     { label: "Non publié par l'émetteur", value: e.undetailedEUR, cls: "hachures" },
     { label: "Composition indisponible", value: e.unavailableEUR, cls: "bg-white/[0.12]" },
   ].filter((p) => p.value > 0);
+  // Tant qu'aucune composition de fonds n'est connue, on ne prétend pas compter les entreprises.
+  const blind = e.totalEUR > 0 && e.unavailableEUR / e.totalEUR > 0.5;
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <span className="repere">Ce que tu possèdes vraiment</span>
       <h1 className="font-serif text-[clamp(36px,9vw,64px)] leading-[1.02] font-light tracking-[-0.02em] text-balance">
-        Tu crois avoir {snapshot.lines.length} lignes.{" "}
+        Tu crois avoir {snapshot.lines.length} {snapshot.lines.length > 1 ? "lignes" : "ligne"}.{" "}
         <em className="text-brume">
-          Tu possèdes au moins <span className="font-sans not-italic font-medium tracking-[-0.04em] text-craie tabular">{formatNumber(e.minCompanies)}</span> entreprises.
+          {blind ? (
+            "Ce qu'elles contiennent arrive bientôt."
+          ) : (
+            <>
+              Tu possèdes au moins <span className="font-sans not-italic font-medium tracking-[-0.04em] text-craie tabular">{formatNumber(e.minCompanies)}</span> entreprises.
+            </>
+          )}
         </em>
       </h1>
       <div className="flex flex-col gap-3">
@@ -110,6 +119,15 @@ function viaLabel(c: CompanyExposure, instruments: Record<string, Instrument>) {
 function TopCompanies({ snapshot, instruments, onSelect }: { snapshot: Snapshot; instruments: Record<string, Instrument>; onSelect: (c: CompanyExposure) => void }) {
   const top = snapshot.exposure.companies.slice(0, 10);
   const max = top[0]?.weight ?? 1;
+  if (top.length === 0) {
+    return (
+      <Card className="flex flex-col gap-3">
+        <Eyebrow>Top 10, ETF fusionnés</Eyebrow>
+        <p className="font-serif text-[21px] leading-snug">Les entreprises cachées dans tes fonds apparaîtront ici.</p>
+        <p className="text-[13.5px] text-brume">La composition des ETF arrive avec la phase 3. En attendant, Atlas ne devine rien.</p>
+      </Card>
+    );
+  }
   return (
     <Card className="flex flex-col gap-3">
       <Eyebrow right="Poids réel">Top 10, ETF fusionnés</Eyebrow>
@@ -152,6 +170,15 @@ function TopCompanies({ snapshot, instruments, onSelect }: { snapshot: Snapshot;
 function ProfitsCard({ snapshot, instruments }: { snapshot: Snapshot; instruments: Record<string, Instrument> }) {
   const e = snapshot.earnings;
   const divShare = e.profitsEUR > 0 ? Math.max(0, e.dividendsEUR / e.profitsEUR) : 0;
+  if (e.coveredEUR === 0) {
+    return (
+      <Card className="flex flex-col gap-3">
+        <Eyebrow right="par an">Bénéfices réels</Eyebrow>
+        <p className="font-serif text-[21px] leading-snug">Ta part des profits des entreprises que tu possèdes s&apos;affichera ici.</p>
+        <p className="text-[13.5px] text-brume">Il faut le rendement bénéficiaire de chaque ligne : connu pour les actions en direct, il arrive pour les fonds avec leur composition.</p>
+      </Card>
+    );
+  }
   return (
     <Card className="flex flex-col gap-4">
       <Eyebrow right="par an">Bénéfices réels</Eyebrow>
@@ -293,6 +320,8 @@ function BlindSpots({ snapshot, instruments }: { snapshot: Snapshot; instruments
   const heavy = snapshot.concentration.above;
   const fees = snapshot.fees;
   const tech = snapshot.breakdowns.sector.slices.find((s) => s.key === "Technologie");
+  const e = snapshot.exposure;
+  const blind = e.totalEUR > 0 && e.unavailableEUR / e.totalEUR > 0.5;
   return (
     <section className="flex flex-col gap-5" aria-label="Angles morts">
       <div>
@@ -325,7 +354,9 @@ function BlindSpots({ snapshot, instruments }: { snapshot: Snapshot; instruments
         <Card className="flex flex-col gap-3">
           <Eyebrow>Concentration</Eyebrow>
           <p className="font-serif text-[21px] leading-snug">
-            {heavy.length ? (
+            {blind ? (
+              "Impossible à mesurer tant que la composition de tes fonds est inconnue."
+            ) : heavy.length ? (
               <>
                 {heavy.map((c) => c.name).join(", ")} {heavy.length > 1 ? "pèsent chacune" : "pèse"} plus de 5 % de ton patrimoine.
               </>

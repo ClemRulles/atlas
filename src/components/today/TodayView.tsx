@@ -9,15 +9,19 @@ import { BigTotal, Card, Eyebrow, Gauge, Money, Pct, Reveal } from "@/components
 import { periodReturn, periodSeries, type LineView, type Period, type Snapshot } from "@/lib/analysis";
 import { frenchDay, sentenceText, type Token } from "@/lib/domain/sentence";
 import type { SeriesPoint } from "@/lib/domain/valuation";
+import type { Transaction } from "@/lib/domain/types";
 import { formatEUR, formatNumber, formatPct } from "@/lib/format";
 import { useAtlas } from "@/lib/store";
 import { haptic } from "@/lib/ui";
 
 export function TodayView() {
-  const { snapshot, mode, data } = useAtlas();
-  const [selected, setSelected] = useState<LineView | null>(null);
+  const { snapshot, mode, data, market } = useAtlas();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   if (!snapshot || !data) return <PageSkeleton />;
   if (mode === "real" && snapshot.lines.length === 0) return <EmptyPortfolio question="Qu'est-ce qui s'est passé aujourd'hui ?" />;
+  // Premier chargement des cours : rien à raconter tant qu'aucune ligne n'est valorisée.
+  if (mode === "real" && market.loading && snapshot.lines.every((l) => l.valued.valueEUR === null)) return <PageSkeleton label="Récupération des cours…" />;
+  const selected = snapshot.lines.find((l) => l.instrument.id === selectedId) ?? null;
 
   return (
     <div className="grid gap-x-14 gap-y-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
@@ -35,10 +39,10 @@ export function TodayView() {
           <LifeSlicesCard snapshot={snapshot} expectedReturn={data.expectedReturn} />
         </Reveal>
         <Reveal i={5}>
-          <Positions snapshot={snapshot} onSelect={setSelected} />
+          <Positions snapshot={snapshot} onSelect={(l) => setSelectedId(l.instrument.id)} />
         </Reveal>
       </div>
-      <PositionSheet line={selected} onClose={() => setSelected(null)} notes={data.transactions} />
+      <PositionSheet line={selected} onClose={() => setSelectedId(null)} transactions={data.transactions} editable={mode === "real"} />
     </div>
   );
 }
@@ -47,11 +51,32 @@ export function TodayView() {
 function DailySentence({ tokens }: { tokens: Token[] }) {
   const reduce = useReducedMotion();
   const words = useMemo(() => {
-    const out: { text: string; kind: Token["kind"]; space: boolean }[] = [];
+    const out: { prefix: string; text: string; kind: Token["kind"]; suffix: string; space: boolean }[] = [];
     for (const t of tokens) {
       // Les montants et les noms restent d'un seul tenant.
       const parts = t.kind === "text" ? t.text.split(/(?<= )/) : [t.text];
-      for (const p of parts) if (p) out.push({ text: p.trimEnd(), kind: t.kind, space: p.endsWith(" ") });
+      for (const p of parts) {
+        if (!p) continue;
+        const last = out[out.length - 1];
+        // Une espace seule n'est pas un mot : elle marque juste la fin du précédent.
+        if (!p.trim()) {
+          if (last) last.space = true;
+          continue;
+        }
+        // La ponctuation reste collée au mot précédent : jamais de point seul en début de ligne.
+        if (t.kind === "text" && last && !last.space && /^[.,;:!?)]/.test(p)) {
+          last.suffix += p.trimEnd();
+          last.space = p.endsWith(" ");
+          continue;
+        }
+        // Une élision (« d' ») reste collée au mot suivant.
+        if (last && !last.space && last.kind === "text" && last.text.endsWith("'")) {
+          out.pop();
+          out.push({ prefix: last.text, text: p.trimEnd(), kind: t.kind, suffix: "", space: p.endsWith(" ") });
+          continue;
+        }
+        out.push({ prefix: "", text: p.trimEnd(), kind: t.kind, suffix: "", space: p.endsWith(" ") });
+      }
     }
     return out;
   }, [tokens]);
@@ -67,7 +92,9 @@ function DailySentence({ tokens }: { tokens: Token[] }) {
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.12 + i * 0.036 }}
         >
           {/* Le flou du mode discret va sur un enfant : l'animation pose son propre filtre sur ce span. */}
+          {w.prefix && <span className="not-italic">{w.prefix}</span>}
           {w.kind === "key" || w.kind === "amount" ? <span className="amt">{w.text}</span> : w.text}
+          {w.suffix && <span className="font-[350] text-craie not-italic">{w.suffix}</span>}
           {w.space && " "}
         </motion.span>
       ))}
@@ -106,6 +133,7 @@ function TotalBlock({ snapshot }: { snapshot: Snapshot }) {
         <Pct value={change.pct} />
         <span className="text-ombre">{closed && closeDate ? frenchDay(closeDate) : "aujourd'hui"}</span>
       </div>
+      <MarketFreshness />
     </div>
   );
 }
@@ -171,9 +199,15 @@ function EvolutionBlock({ snapshot }: { snapshot: Snapshot }) {
 
 function LifeSlicesCard({ snapshot, expectedReturn }: { snapshot: Snapshot; expectedReturn: number }) {
   const { life } = snapshot;
+  const { openSheet } = useAtlas();
   return (
     <Card className="flex flex-col gap-4">
-      <Eyebrow right={`${formatPct(expectedReturn, { decimals: 0 })} / an attendu`}>Morceaux de vie</Eyebrow>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="repere">Morceaux de vie</span>
+        <button type="button" onClick={() => (haptic(), openSheet("expenses"))} className="touche repere rounded-full border border-white/10 px-2.5 py-1 hover:text-brume">
+          {formatPct(expectedReturn, { decimals: 1 })} / an · modifier
+        </button>
+      </div>
       <p className="font-serif text-[23px] leading-[1.2] font-[350] text-balance">
         Tes placements paient déjà <Money value={life.monthlyIncomeEUR} className="font-sans text-[0.88em] font-medium tracking-[-0.02em]" /> de ta vie chaque mois.
       </p>
@@ -240,21 +274,24 @@ function Positions({ snapshot, onSelect }: { snapshot: Snapshot; onSelect: (l: L
   );
 }
 
-function PositionSheet({ line, onClose, notes }: { line: LineView | null; onClose: () => void; notes: { instrumentId: string; date: string; note?: string; broker?: string }[] }) {
-  const own = line ? notes.filter((t) => t.instrumentId === line.instrument.id) : [];
+function PositionSheet({ line, onClose, transactions, editable }: { line: LineView | null; onClose: () => void; transactions: Transaction[]; editable: boolean }) {
+  const { openSheet, deleteTransaction } = useAtlas();
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const own = line ? transactions.filter((t) => t.instrumentId === line.instrument.id).sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
   const brokers = [...new Set(own.map((t) => t.broker).filter(Boolean))];
   const convictions = own.filter((t) => t.note);
   const gainPct = line && line.valued.gainEUR !== null && line.position.costEUR ? line.valued.gainEUR / line.position.costEUR : null;
+  const longDate = (d: string) => new Intl.DateTimeFormat("fr-BE", { dateStyle: "long", timeZone: "UTC" }).format(new Date(d));
   return (
     <Sheet open={!!line} onClose={onClose} title={line?.instrument.name ?? "Position"}>
       {line && (
         <div className="flex flex-col gap-6">
           <div>
-            <span className="repere">{[line.instrument.isin, line.instrument.exchange].filter(Boolean).join(" · ")}</span>
+            <span className="repere">{[line.instrument.isin, line.instrument.symbol, line.instrument.exchange].filter(Boolean).join(" · ")}</span>
             <h2 className="mt-1 font-serif text-[30px] leading-tight">{line.instrument.name}</h2>
           </div>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-[14.5px]">
-            <Stat label="Valeur">{line.valued.valueEUR === null ? "—" : <Money value={line.valued.valueEUR} decimals={2} />}</Stat>
+            <Stat label="Valeur">{line.valued.valueEUR === null ? <span className="text-ombre">cours indisponible</span> : <Money value={line.valued.valueEUR} decimals={2} />}</Stat>
             <Stat label="Plus-value latente">
               {line.valued.gainEUR === null ? "—" : (
                 <span className={line.valued.gainEUR >= 0 ? "text-menthe" : "text-braise"}>
@@ -264,23 +301,78 @@ function PositionSheet({ line, onClose, notes }: { line: LineView | null; onClos
             </Stat>
             <Stat label="Quantité"><span className="tabular">{formatNumber(line.position.quantity, { decimals: line.position.quantity % 1 ? 3 : 0 })}</span></Stat>
             <Stat label="Prix moyen d'achat"><span className="tabular">{formatNumber(line.position.avgPrice, { decimals: 2 })} {line.instrument.currency}</span></Stat>
-            <Stat label="Premier achat"><span className="tabular">{line.position.firstBuy ? new Intl.DateTimeFormat("fr-BE", { dateStyle: "long", timeZone: "UTC" }).format(new Date(line.position.firstBuy)) : "—"}</span></Stat>
+            <Stat label="Premier achat"><span className="tabular">{line.position.firstBuy ? longDate(line.position.firstBuy) : "—"}</span></Stat>
             <Stat label={brokers.length > 1 ? "Courtiers" : "Courtier"}>{brokers.join(", ") || "—"}</Stat>
           </dl>
           {convictions.length > 0 && (
             <div className="flex flex-col gap-3">
               <span className="repere">Ce que tu pensais en achetant</span>
               {convictions.map((c) => (
-                <blockquote key={c.date} className="border-l border-white/20 pl-4 font-serif text-[18px] leading-snug italic">
+                <blockquote key={c.id} className="border-l border-white/20 pl-4 font-serif text-[18px] leading-snug italic">
                   « {c.note} »
-                  <footer className="mt-1 font-sans text-[12.5px] text-ombre not-italic">{new Intl.DateTimeFormat("fr-BE", { dateStyle: "long", timeZone: "UTC" }).format(new Date(c.date))}</footer>
+                  <footer className="mt-1 font-sans text-[12.5px] text-ombre not-italic">{longDate(c.date)}</footer>
                 </blockquote>
               ))}
+            </div>
+          )}
+          {editable && (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => openSheet("add", { instrument: line.instrument, side: "buy" })} className="touche verre rounded-full py-3 text-[14px]">
+                  Acheter encore
+                </button>
+                <button type="button" onClick={() => openSheet("add", { instrument: line.instrument, side: "sell" })} className="touche verre rounded-full py-3 text-[14px]">
+                  Vendre
+                </button>
+              </div>
+              <span className="repere mt-2">Transactions</span>
+              <ul className="flex flex-col">
+                {own.map((t) => (
+                  <li key={t.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-white/[0.07] py-2.5 text-[14px] first:border-t-0">
+                    <span className="min-w-0">
+                      <span className={t.side === "buy" ? "" : "text-braise"}>{t.side === "buy" ? "Achat" : "Vente"}</span> de {formatNumber(t.quantity, { decimals: t.quantity % 1 ? 3 : 0 })} à {formatNumber(t.price, { decimals: 2 })} {line.instrument.currency}
+                      <span className="block text-[12.5px] text-ombre">{[longDate(t.date), t.broker].filter(Boolean).join(" · ")}</span>
+                    </span>
+                    {confirming === t.id ? (
+                      <span className="flex gap-1">
+                        <button type="button" onClick={() => setConfirming(null)} className="touche rounded-full px-3 py-1.5 text-[13px] text-brume">Garder</button>
+                        <button type="button" onClick={() => (deleteTransaction(t.id), setConfirming(null), haptic(12))} className="touche rounded-full bg-braise/90 px-3 py-1.5 text-[13px] text-nuit">Supprimer</button>
+                      </span>
+                    ) : (
+                      <button type="button" onClick={() => setConfirming(t.id)} className="touche rounded-full px-3 py-1.5 text-[13px] text-ombre hover:text-craie" aria-label={`Supprimer la transaction du ${longDate(t.date)}`}>
+                        Supprimer
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
       )}
     </Sheet>
+  );
+}
+
+/** Fraîcheur des cours : différés d'environ 15 minutes, jamais présentés comme du temps réel. */
+function MarketFreshness() {
+  const { mode, market, data, refreshMarket } = useAtlas();
+  if (mode !== "real") return <p className="text-[12.5px] text-ombre">Données fictives de démonstration.</p>;
+  const failed = market.failed.map((key) => Object.values(data?.instruments ?? {}).find((i) => i.symbol === key)?.name ?? key);
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-ombre">
+      {market.loading ? (
+        <span>Mise à jour des cours…</span>
+      ) : market.updatedAt ? (
+        <>
+          <span>Cours différés · mis à jour à {new Intl.DateTimeFormat("fr-BE", { hour: "2-digit", minute: "2-digit" }).format(new Date(market.updatedAt))}</span>
+          <button type="button" onClick={() => refreshMarket(true)} className="touche underline decoration-white/20 underline-offset-2 hover:text-brume">
+            actualiser
+          </button>
+        </>
+      ) : null}
+      {failed.length > 0 && <span className="basis-full text-braise/90">Cours indisponible pour {failed.join(", ")}.</span>}
+    </p>
   );
 }
 

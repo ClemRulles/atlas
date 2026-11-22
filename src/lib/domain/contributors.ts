@@ -43,9 +43,16 @@ export function dayStory(
   const exposure = realExposure(previous, instruments, compositions);
   const closeDate = change.lines.reduce<string | null>((max, l) => (l.date && (!max || l.date > max) ? l.date : max), null);
 
+  // Une action détenue en direct est connue par son identifiant (souvent le ticker) et par son ISIN.
+  const stocks = new Map<string, Instrument>();
+  for (const i of Object.values(instruments)) {
+    if (i.type !== "stock") continue;
+    stocks.set(i.id, i);
+    if (i.isin) stocks.set(i.isin, i);
+  }
   const companies: CompanyContribution[] = [];
   for (const company of exposure.companies) {
-    const instrument = instruments[company.key];
+    const instrument = stocks.get(company.key);
     if (!instrument || !closeDate) continue;
     const history = market.prices[instrument.id];
     const last = closeAt(history, closeDate);

@@ -58,6 +58,18 @@ describe("dayStory", () => {
     expect(s.companies[0].pct).toBeCloseTo(-0.2, 12);
   });
 
+  it("reconnaît une action en direct identifiée par son ticker et vue par son ISIN dans les ETF", () => {
+    const byTicker = { ...instruments, "NVDA.US": { ...instruments.NV, id: "NVDA.US" } };
+    delete (byTicker as Record<string, unknown>).NV;
+    const m = market(110, 1);
+    const m2 = { ...m, prices: { ...m.prices, "NVDA.US": m.prices.NV } };
+    const tx2 = txs.map((t) => (t.instrumentId === "NV" ? { ...t, instrumentId: "NVDA.US" } : t));
+    const { positions } = buildPositions(tx2, byTicker, m2, "2025-11-14");
+    const s = dayStory(positions, byTicker, m2, compositions, "2025-11-14");
+    expect(s.companies[0]).toMatchObject({ key: "NV", direct: true, viaFunds: 2 });
+    expect(s.companies[0].changeEUR).toBeCloseTo(300, 9);
+  });
+
   it("n'estime rien pour une entreprise dont on ne connaît pas le cours", () => {
     const s = story({ ...market(110, 1), prices: { ...market(110, 1).prices, NV: [] } });
     expect(s.companies).toEqual([]);
@@ -94,6 +106,14 @@ describe("dailySentence", () => {
   it("ne raconte rien sans deux clôtures", () => {
     const text = sentenceText(dailySentence(story(market(110, 1), "2025-11-13"), { ...opts, today: "2025-11-13" }));
     expect(text).toMatch(/^Pas encore de quoi raconter/);
+  });
+
+  it("ne double pas le point après un nom qui en finit déjà par un", () => {
+    const named = { ...instruments, NV: { ...instruments.NV, name: "Nvidia Corp." } };
+    const { positions } = buildPositions(txs, named, market(90, 1), "2025-11-14");
+    const s = dayStory(positions, named, market(90, 1), {}, "2025-11-14");
+    const text = sentenceText(dailySentence(s, { instruments: named, today: "2025-11-14" }));
+    expect(text).not.toContain("..");
   });
 
   it("écrit les jours en français", () => {

@@ -7,7 +7,9 @@ import { useEffect, type ReactNode } from "react";
 import { IconChat, IconEye, IconEyeOff, IconOwn, IconPlus, IconToday, IconWhatIf } from "@/components/ui/icons";
 import { AtlasProvider, useAtlas } from "@/lib/store";
 import { auroraFor, haptic } from "@/lib/ui";
-import { AddSheet, ChatSheet, ModeSheet } from "./sheets";
+import { AddSheet } from "@/components/add/AddSheet";
+import { CsvSheet } from "@/components/add/CsvSheet";
+import { ChatSheet, ExpensesSheet, ModeSheet } from "./sheets";
 
 export const PAGES = [
   { href: "/", label: "Aujourd'hui", Icon: IconToday },
@@ -25,8 +27,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <Dock />
       <AddSheet />
+      <CsvSheet />
       <ChatSheet />
       <ModeSheet />
+      <ExpensesSheet />
     </AtlasProvider>
   );
 }

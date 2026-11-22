@@ -15,7 +15,7 @@ Trois pages, trois questions :
 | Phase | Contenu | État |
 |---|---|---|
 | 1 | Direction artistique, structure, navigation, mode démo | Fait : direction « Nuit boréale » validée, trois pages en mode démo, navigation, mode discret |
-| 2 | Saisie des positions, cours réels, graphe d'évolution | À faire |
+| 2 | Saisie des positions, cours réels, graphe d'évolution | Fait : recherche par nom/ticker/ISIN, achat et vente, import CSV, cours Yahoo, courbe réelle, dépenses, sauvegarde JSON |
 | 3 | Composition des ETF, page « Ce que tu possèdes » | À faire |
 | 4 | Laboratoire « Et si » | À faire |
 | 5 | IA : phrase du jour, chat, import par capture d'écran | À faire |
@@ -82,11 +82,26 @@ Atlas remplace l'app WealthView qui occupait ce dépôt. Son code reste dans l'h
 
 | Morceau de WealthView | Fichier sur `main` | Repris en |
 |---|---|---|
-| Valeurs liquidatives et historiques des fonds par ISIN (Financial Times) | `src/app/api/market/route.ts` | Phase 2 |
-| Recherche de titres, repli Yahoo → Twelve Data | `src/app/api/market/route.ts`, `src/lib/marketClient.ts` | Phase 2 |
+| Recherche de titres, repli Yahoo → Twelve Data | `src/app/api/market/route.ts`, `src/lib/marketClient.ts` | Remplacé en phase 2 par yahoo-finance2 seul |
 | Verrouillage par code PIN ou biométrie | `src/components/LockScreen.tsx` | Phase 6 |
 
 Pour relire un fichier : `git show origin/main:src/app/api/market/route.ts`.
+
+Non repris : la lecture des valeurs liquidatives sur le Financial Times. Elle appelle une API interne non documentée du site en imitant un navigateur ; Atlas s'en tient aux sources publiques. Un fonds que Yahoo ne cote pas s'affiche « cours indisponible ».
+
+## Cours et données de marché
+
+Toutes les requêtes passent par les routes serveur de l'app, jamais du navigateur vers un fournisseur :
+
+| Route | Rôle | Cache CDN |
+|---|---|---|
+| `GET /api/search?q=` | Recherche par nom, ticker ou ISIN ; pour un ISIN, ajoute les autres places du même produit | 1 jour |
+| `GET /api/history?symbol=&from=` | Clôtures quotidiennes, devise, place ; pence ramenés en livres | 15 min |
+| `GET /api/profile?symbol=` | Secteur et pays d'une action, rendement bénéficiaire et dividende, frais d'un fonds | 7 jours |
+
+Les cours sont différés d'environ 15 minutes et l'app l'affiche. Les taux de change viennent de Yahoo (`EURUSD=X` = dollars pour 1 euro). Une ligne est identifiée par sa cotation (IWDA.AS et IWDA.L sont deux lignes : même ISIN, devises différentes).
+
+Sur l'appareil, IndexedDB garde les positions, les dépenses et un cache des cours ; l'export JSON (feuille « Mon portefeuille ») permet de tout sauvegarder ou de changer d'appareil.
 
 ## Organisation du code
 
@@ -106,6 +121,12 @@ src/lib/domain/         Calculs financiers purs, sans dépendance à l'interface
   exchanges.ts          Places boursières et heures d'ouverture (globe)
 src/lib/analysis.ts     Assemble tous les calculs en un instantané pour l'interface
 src/lib/store.tsx       État de l'app : démo ou vrai portefeuille, mode discret, feuilles ouvertes
+src/lib/user-data.ts    Positions saisies, réglages, cache des cours, sauvegarde : fonctions pures
+src/lib/csv.ts          Lecture tolérante des exports CSV de courtiers
+src/lib/market-format.ts  Devises en centimes, dates par fuseau, ISIN, noms lisibles
+src/lib/server/yahoo.ts Accès Yahoo Finance côté serveur, avec cache mémoire
+src/lib/db.ts           Persistance IndexedDB
+src/app/api/            Routes serveur : recherche, historiques, profils
 src/lib/demo/           Portefeuille de démonstration fictif et déterministe
 src/components/         Coquille (aurore, barre flottante, feuilles), pages, graphes, globe
 src/lib/format.ts       Montants et pourcentages à la belge francophone

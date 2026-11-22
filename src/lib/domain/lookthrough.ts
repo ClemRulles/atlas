@@ -315,7 +315,7 @@ export function annualFees(
       out.push({ instrumentId: instrument.id, expenseRatio: 0, feeEUR: 0 });
       continue;
     }
-    const ratio = compositions[line.instrumentId]?.expenseRatio;
+    const ratio = compositions[line.instrumentId]?.expenseRatio ?? instrument.expenseRatio;
     if (ratio === undefined) {
       unknown.push(instrument.id);
       out.push({ instrumentId: instrument.id, expenseRatio: null, feeEUR: null });

@@ -77,7 +77,7 @@ export function dailySentence(story: DayStory, { today, instruments }: SentenceO
       .filter((l) => l.changeEUR !== null && Math.sign(l.changeEUR) === Math.sign(delta))
       .sort((a, b) => Math.abs(b.changeEUR!) - Math.abs(a.changeEUR!))[0];
     const name = line && instruments[line.instrumentId]?.name;
-    if (name) tokens.push(text(delta > 0 ? " Surtout grâce à " : " Surtout à cause de "), { kind: "name", text: name }, text("."));
+    if (name) tokens.push(text(delta > 0 ? " Surtout grâce à " : ` Surtout à cause ${elide("de", name)}`), { kind: "name", text: name }, text("."));
   }
 
   // L'effet des devises, quand il compte.
@@ -95,7 +95,21 @@ export function dailySentence(story: DayStory, { today, instruments }: SentenceO
     else if (fx > 0) tokens.push(text(` ${who} ${plural ? "ont" : "a"} amorti `), amount, text("."));
     else tokens.push(text(` ${who} ${plural ? "ont" : "a"} creusé la baisse de `), amount, text("."));
   }
-  return tokens;
+  return withoutDoublePeriods(tokens);
+}
+
+/** « ASML Holding N.V. » suivi d'un point final : un seul point. */
+function withoutDoublePeriods(tokens: Token[]): Token[] {
+  return tokens.map((t, i) => {
+    const before = tokens[i - 1];
+    if (t.kind === "text" && t.text.startsWith(".") && before?.text.endsWith(".")) return { ...t, text: t.text.slice(1) };
+    return t;
+  }).filter((t) => t.text !== "");
+}
+
+/** « de » devant une consonne, « d' » devant une voyelle ou un h muet : « d'iShares ». */
+export function elide(word: "de" | "que", next: string): string {
+  return /^[aeiouyhàâäéèêëîïôöûüœæ]/i.test(next) ? `${word.slice(0, -1)}'` : `${word} `;
 }
 
 function capitalize(s: string): string {

@@ -165,6 +165,12 @@ describe("annualFees", () => {
     expect(fees.lines.find((l) => l.instrumentId === "X")).toEqual({ instrumentId: "X", expenseRatio: 0, feeEUR: 0 });
     expect(fees.lines.find((l) => l.instrumentId === "B")).toEqual({ instrumentId: "B", expenseRatio: null, feeEUR: null });
   });
+
+  it("prend les frais connus de la ligne quand la composition manque", () => {
+    const fees = annualFees([{ instrumentId: "F", valueEUR: 1000 }], { ...instruments, F: { ...instruments.F, expenseRatio: 0.015 } }, compositions);
+    expect(fees.totalEUR).toBeCloseTo(15, 12);
+    expect(fees.unknown).toEqual([]);
+  });
 });
 
 describe("concentration", () => {

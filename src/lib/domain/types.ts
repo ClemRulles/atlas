@@ -29,6 +29,8 @@ export interface Instrument {
   /** Actions en direct : bénéfice par action / cours, et dividende / cours (ratios). */
   earningsYield?: number;
   dividendYield?: number;
+  /** Frais courants d'un ETF ou d'un fonds, quand on les connaît sans sa composition. */
+  expenseRatio?: number;
 }
 
 export interface Transaction {

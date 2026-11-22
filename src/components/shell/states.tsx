@@ -3,9 +3,10 @@
 import { useAtlas } from "@/lib/store";
 
 /** Silhouettes lumineuses pendant le démarrage. */
-export function PageSkeleton() {
+export function PageSkeleton({ label }: { label?: string }) {
   return (
-    <div className="flex flex-col gap-5" aria-busy="true" aria-label="Chargement">
+    <div className="flex flex-col gap-5" aria-busy="true" aria-label={label ?? "Chargement"}>
+      {label && <p className="repere">{label}</p>}
       <div className="silhouette h-[118px] w-full max-w-xl" />
       <div className="silhouette h-14 w-64" />
       <div className="silhouette h-[170px] w-full" />
