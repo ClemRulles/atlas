@@ -32,20 +32,25 @@ const START = "2021-01-04";
 
 /* ——— Hasard déterministe ——— */
 
-function mulberry32(seed: number): () => number {
-  let s = seed | 0;
-  return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+/** Nombre pseudo-aléatoire dans [0, 1[ qui ne dépend que de (flux, jour, tirage). */
+function hash01(stream: number, day: number, draw: number): number {
+  let h = Math.imul(stream ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(day + 1, 0xc2b2ae35) ^ Math.imul(draw + 7, 0x27d4eb2f);
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-function gaussian(random: () => number): number {
-  const u = Math.max(random(), 1e-12);
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * random());
+/**
+ * Tirage gaussien indexé par jour : ajouter des jours à la fin ne change jamais le passé,
+ * donc la démo garde la même histoire d'un jour à l'autre.
+ */
+function gaussian(stream: number, day: number): number {
+  const u = Math.max(hash01(stream, day, 0), 1e-12);
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * hash01(stream, day, 1));
 }
+
+/** Indice de jour stable (jours depuis le 1er janvier 2021), indépendant de la date d'arrêt. */
+const dayIndex = (date: string) => Math.round((Date.parse(date) - Date.parse("2021-01-01")) / 86_400_000);
 
 /** Jours ouvrés (lundi à vendredi) entre deux dates incluses. */
 export function businessDays(from: string, to: string): string[] {
@@ -74,10 +79,10 @@ const SPECS: Spec[] = [
   { instrument: { id: "IE00BK5BQT80", isin: "IE00BK5BQT80", symbol: "VWCE.DE", name: "Vanguard FTSE All-World", type: "etf", currency: "EUR", exchange: "Xetra", benchmark: "MSCI World" }, start: 86.4, beta: 0.97, alpha: 0, vol: 0.002 },
   { instrument: { id: "IE00BKM4GZ66", isin: "IE00BKM4GZ66", symbol: "EMIM.AS", name: "iShares Core MSCI EM IMI", type: "etf", currency: "EUR", exchange: "Amsterdam", benchmark: "MSCI Emerging Markets" }, start: 31.5, beta: 0.8, alpha: -0.00025, vol: 0.006 },
   { instrument: { id: "IE00B5BMR087", isin: "IE00B5BMR087", symbol: "CSPX.L", name: "iShares Core S&P 500", type: "etf", currency: "USD", exchange: "Londres", benchmark: "S&P 500" }, start: 372, beta: 1.06, alpha: 0.00005, vol: 0.003 },
-  { instrument: { id: "NL0010273215", isin: "NL0010273215", symbol: "ASML.AS", name: "ASML", type: "stock", currency: "EUR", exchange: "Amsterdam", sector: "Technologie", country: "Pays-Bas", benchmark: "MSCI World" }, start: 418, beta: 1.45, alpha: 0.0001, vol: 0.015 },
-  { instrument: { id: "US67066G1040", isin: "US67066G1040", symbol: "NVDA", name: "Nvidia", type: "stock", currency: "USD", exchange: "Nasdaq", sector: "Technologie", country: "États-Unis", benchmark: "Nasdaq 100" }, start: 13.1, beta: 1.8, alpha: 0.0011, vol: 0.022 },
-  { instrument: { id: "US5949181045", isin: "US5949181045", symbol: "MSFT", name: "Microsoft", type: "stock", currency: "USD", exchange: "Nasdaq", sector: "Technologie", country: "États-Unis", benchmark: "Nasdaq 100" }, start: 217, beta: 1.12, alpha: 0.0001, vol: 0.011 },
-  { instrument: { id: "BE0974293251", isin: "BE0974293251", symbol: "ABI.BR", name: "AB InBev", type: "stock", currency: "EUR", exchange: "Bruxelles", sector: "Consommation de base", country: "Belgique", benchmark: "MSCI World" }, start: 57.4, beta: 0.7, alpha: -0.0003, vol: 0.012 },
+  { instrument: { id: "NL0010273215", isin: "NL0010273215", symbol: "ASML.AS", name: "ASML", type: "stock", currency: "EUR", exchange: "Amsterdam", sector: "Technologie", country: "Pays-Bas", benchmark: "MSCI World", earningsYield: 0.028, dividendYield: 0.009 }, start: 418, beta: 1.45, alpha: 0.0001, vol: 0.015 },
+  { instrument: { id: "US67066G1040", isin: "US67066G1040", symbol: "NVDA", name: "Nvidia", type: "stock", currency: "USD", exchange: "Nasdaq", sector: "Technologie", country: "États-Unis", benchmark: "Nasdaq 100", earningsYield: 0.022, dividendYield: 0.0003 }, start: 13.1, beta: 1.8, alpha: 0.0011, vol: 0.022 },
+  { instrument: { id: "US5949181045", isin: "US5949181045", symbol: "MSFT", name: "Microsoft", type: "stock", currency: "USD", exchange: "Nasdaq", sector: "Technologie", country: "États-Unis", benchmark: "Nasdaq 100", earningsYield: 0.03, dividendYield: 0.007 }, start: 217, beta: 1.12, alpha: 0.0001, vol: 0.011 },
+  { instrument: { id: "BE0974293251", isin: "BE0974293251", symbol: "ABI.BR", name: "AB InBev", type: "stock", currency: "EUR", exchange: "Bruxelles", sector: "Consommation de base", country: "Belgique", benchmark: "MSCI World", earningsYield: 0.055, dividendYield: 0.018 }, start: 57.4, beta: 0.7, alpha: -0.0003, vol: 0.012 },
   { instrument: { id: "FR0010135103", isin: "FR0010135103", symbol: "0P00000FB2.F", name: "Carmignac Patrimoine A", type: "fund", currency: "EUR", exchange: "Fonds", benchmark: "MSCI World" }, start: 688, beta: 0.38, alpha: -0.00012, vol: 0.0025 },
 ];
 
@@ -123,6 +128,8 @@ function compositions(asOf: string): FundComposition[] {
       instrumentId: "IE00B4L5Y983",
       expenseRatio: 0.002,
       holdingsCount: 1320,
+      earningsYield: 0.046,
+      dividendYield: 0.016,
       holdings: holdings({ nvidia: 5.3, apple: 4.6, microsoft: 4.2, amazon: 2.7, alphabet: 2.9, meta: 1.9, broadcom: 1.6, tesla: 1.4, jpmorgan: 1.0, lilly: 0.9, berkshire: 0.8, asml: 0.6, novo: 0.4, lvmh: 0.3, abinbev: 0.06 }),
       sectors: weights({ Technologie: 27, Finance: 16, Santé: 11, Industrie: 11, "Consommation discrétionnaire": 10, Communication: 8, "Consommation de base": 6, Énergie: 4, Matériaux: 3, "Services publics": 2.5, Immobilier: 1.5 }),
       countries: weights({ "États-Unis": 72, Japon: 5.5, "Royaume-Uni": 3.6, Canada: 3.1, France: 2.7, Suisse: 2.4, Allemagne: 2.3, Australie: 1.7, "Pays-Bas": 1.2, Autres: 5.5 }),
@@ -133,6 +140,8 @@ function compositions(asOf: string): FundComposition[] {
       instrumentId: "IE00BK5BQT80",
       expenseRatio: 0.0022,
       holdingsCount: 3650,
+      earningsYield: 0.049,
+      dividendYield: 0.019,
       holdings: holdings({ nvidia: 4.6, apple: 4.0, microsoft: 3.7, amazon: 2.4, alphabet: 2.5, meta: 1.7, broadcom: 1.4, tesla: 1.2, tsmc: 1.1, jpmorgan: 0.9, lilly: 0.8, berkshire: 0.7, tencent: 0.5, asml: 0.5, samsung: 0.3, novo: 0.3, lvmh: 0.25, alibaba: 0.25, abinbev: 0.05 }),
       sectors: weights({ Technologie: 26, Finance: 17, Industrie: 11, Santé: 10, "Consommation discrétionnaire": 10.5, Communication: 8.5, "Consommation de base": 5.5, Énergie: 4, Matériaux: 3.5, "Services publics": 2.5, Immobilier: 1.5 }),
       countries: weights({ "États-Unis": 63, Japon: 5.6, "Royaume-Uni": 3.4, Chine: 3.1, Canada: 2.8, France: 2.3, Taïwan: 2.2, Suisse: 2.1, Allemagne: 2.0, Inde: 1.9, Autres: 11.6 }),
@@ -143,6 +152,8 @@ function compositions(asOf: string): FundComposition[] {
       instrumentId: "IE00BKM4GZ66",
       expenseRatio: 0.0018,
       holdingsCount: 3100,
+      earningsYield: 0.074,
+      dividendYield: 0.028,
       holdings: holdings({ tsmc: 9.5, tencent: 4.2, samsung: 3.1, alibaba: 2.6, reliance: 1.2, hdfc: 1.1 }),
       sectors: weights({ Technologie: 24, Finance: 22, "Consommation discrétionnaire": 13, Communication: 9.5, Industrie: 8, Matériaux: 7, "Consommation de base": 5, Énergie: 4.5, Santé: 3.5, "Services publics": 2, Immobilier: 1.5 }),
       countries: weights({ Chine: 26, Taïwan: 19, Inde: 18, "Corée du Sud": 11, Brésil: 4.5, "Arabie saoudite": 3.5, "Afrique du Sud": 3, Mexique: 2, Autres: 13 }),
@@ -153,6 +164,8 @@ function compositions(asOf: string): FundComposition[] {
       instrumentId: "IE00B5BMR087",
       expenseRatio: 0.0007,
       holdingsCount: 503,
+      earningsYield: 0.04,
+      dividendYield: 0.012,
       holdings: holdings({ nvidia: 7.4, apple: 6.5, microsoft: 5.9, alphabet: 4.1, amazon: 3.8, meta: 2.7, broadcom: 2.3, tesla: 2.0, berkshire: 1.6, jpmorgan: 1.4, lilly: 1.3 }),
       sectors: weights({ Technologie: 33, Finance: 13, "Consommation discrétionnaire": 10.5, Santé: 10, Communication: 9.5, Industrie: 8, "Consommation de base": 5.5, Énergie: 3.5, "Services publics": 2.5, Matériaux: 2.5, Immobilier: 2 }),
       countries: weights({ "États-Unis": 100 }),
@@ -165,23 +178,22 @@ function compositions(asOf: string): FundComposition[] {
 /* ——— Cours fictifs ——— */
 
 function buildMarket(days: string[]): MarketData {
-  const random = mulberry32(20261115);
   // Un facteur de marché commun, avec une année 2022 difficile, donne des courbes crédibles.
   const factor = days.map((date) => {
     const drift = date >= "2022-01-03" && date <= "2022-10-14" ? -0.0011 : 0.00052;
-    return drift + 0.0083 * gaussian(random);
+    return drift + 0.0083 * gaussian(1, dayIndex(date));
   });
   const prices: Record<string, PriceHistory> = {};
-  for (const spec of SPECS) {
+  SPECS.forEach((spec, s) => {
     let price = spec.start;
     prices[spec.instrument.id] = days.map((date, i) => {
-      if (i > 0) price *= Math.exp(spec.beta * factor[i] + spec.alpha + spec.vol * gaussian(random));
+      if (i > 0) price *= Math.exp(spec.beta * factor[i] + spec.alpha + spec.vol * gaussian(10 + s, dayIndex(date)));
       return { date, close: Number(price.toFixed(price < 100 ? 3 : 2)) };
     });
-  }
+  });
   let eurusd = 1.22;
   const usd: PriceHistory = days.map((date, i) => {
-    if (i > 0) eurusd += 0.003 * (1.1 - eurusd) + 0.0042 * gaussian(random);
+    if (i > 0) eurusd += 0.003 * (1.1 - eurusd) + 0.0042 * gaussian(2, dayIndex(date));
     return { date, close: Number(eurusd.toFixed(4)) };
   });
   return { prices, fx: { USD: usd } };

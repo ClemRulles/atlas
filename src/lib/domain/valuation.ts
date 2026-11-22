@@ -69,7 +69,12 @@ export interface DayChangeLine {
   priceEffectEUR: number | null;
   /** Part due au mouvement de la devise de cotation face à l'euro. */
   fxEffectEUR: number | null;
+  /** Valeur de la ligne à la clôture précédente. */
+  previousEUR: number | null;
   pct: number | null;
+  /** Dates des deux clôtures comparées. */
+  date: string | null;
+  previousDate: string | null;
 }
 
 export interface DayChange {
@@ -101,7 +106,16 @@ export function dayChange(
   let fxEffectEUR = 0;
   let previousEUR = 0;
   const lines = positions.map((p): DayChangeLine => {
-    const none = { instrumentId: p.instrumentId, changeEUR: null, priceEffectEUR: null, fxEffectEUR: null, pct: null };
+    const none = {
+      instrumentId: p.instrumentId,
+      changeEUR: null,
+      priceEffectEUR: null,
+      fxEffectEUR: null,
+      previousEUR: null,
+      pct: null,
+      date: null,
+      previousDate: null,
+    };
     const instrument = instruments[p.instrumentId];
     const history = market.prices[p.instrumentId];
     const last = closeAt(history, date);
@@ -123,7 +137,10 @@ export function dayChange(
       changeEUR: priceEffect + fxEffect,
       priceEffectEUR: priceEffect,
       fxEffectEUR: fxEffect,
+      previousEUR: previous,
       pct: previous > 0 ? (priceEffect + fxEffect) / previous : null,
+      date: last.date,
+      previousDate: before.date,
     };
   });
   return {

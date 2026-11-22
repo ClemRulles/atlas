@@ -14,7 +14,7 @@ Trois pages, trois questions :
 
 | Phase | Contenu | État |
 |---|---|---|
-| 1 | Direction artistique, structure, navigation, mode démo | Direction artistique proposée, en attente d'accord. Socle de calcul et portefeuille démo faits. |
+| 1 | Direction artistique, structure, navigation, mode démo | Fait : direction « Nuit boréale » validée, trois pages en mode démo, navigation, mode discret |
 | 2 | Saisie des positions, cours réels, graphe d'évolution | À faire |
 | 3 | Composition des ETF, page « Ce que tu possèdes » | À faire |
 | 4 | Laboratoire « Et si » | À faire |
@@ -46,8 +46,6 @@ Aucune n'est nécessaire pour les phases 1 et 2 : le mode démo est entièrement
 | `EULERPOOL_API_KEY` | 3 | Clé Eulerpool (offre gratuite, usage non commercial) |
 | `FMP_API_KEY` | 3 | Clé Financial Modeling Prep, si ce fournisseur est choisi |
 | `FINNHUB_API_KEY` | 3 | Clé Finnhub, si ce fournisseur est choisi |
-| `GEMINI_API_KEY` | 5 | Clé de l'offre gratuite de l'API Gemini (Google AI Studio) |
-| `GEMINI_MODEL` | 5 | Identifiant du modèle Gemini utilisé pour le chat, l'import par capture et la tournure de la phrase du jour |
 
 ## Coût : zéro
 
@@ -58,9 +56,13 @@ Atlas ne doit rien coûter. Chaque brique a une offre gratuite suffisante pour u
 | Hébergement | Vercel | Plan Hobby |
 | Cours et historiques | Yahoo Finance (yahoo-finance2) | Sans clé |
 | Composition des ETF | Eulerpool | 100 000 requêtes par mois, usage non commercial |
-| IA | API Gemini | Quota gratuit, limites par projet affichées dans AI Studio |
+| « IA » | Aucun service externe | Tout tourne dans l'app |
 
-La phrase du jour est d'abord calculée sans IA : les chiffres (variation, contributeurs, effet devise) viennent du moteur de calcul et sont insérés dans des modèles de phrases. Gemini ne fait que reformuler quand il est disponible. Si le quota gratuit est épuisé ou la clé absente, la phrase reste juste et l'app continue de fonctionner. Le chat et l'import par capture, eux, ont besoin de Gemini.
+Atlas n'utilise aucune clé d'IA :
+
+- **Phrase du jour** : les chiffres (variation, contributeurs à travers les ETF, effet devise) viennent du moteur de calcul et sont insérés dans des modèles de phrases (`src/lib/domain/sentence.ts`). Elle ne peut pas inventer un chiffre.
+- **Chat « Demande à ton patrimoine »** (phase 5) : il reconnaît les questions courantes (« combien j'ai en dollars ? », « quel est mon plus gros risque ? ») et y répond à partir des analyses déjà calculées, avec des questions suggérées.
+- **Import par capture d'écran** (phase 5) : reconnaissance de texte dans le navigateur (Tesseract.js), puis l'utilisateur valide chaque ligne extraite. L'image ne quitte pas le téléphone.
 
 ## Composition des ETF : choix du fournisseur
 
@@ -82,7 +84,6 @@ Atlas remplace l'app WealthView qui occupait ce dépôt. Son code reste dans l'h
 |---|---|---|
 | Valeurs liquidatives et historiques des fonds par ISIN (Financial Times) | `src/app/api/market/route.ts` | Phase 2 |
 | Recherche de titres, repli Yahoo → Twelve Data | `src/app/api/market/route.ts`, `src/lib/marketClient.ts` | Phase 2 |
-| Appel Gemini avec repli entre modèles | `src/app/api/ai/route.ts` | Phase 5, sans le rôle de « conseiller » |
 | Verrouillage par code PIN ou biométrie | `src/components/LockScreen.tsx` | Phase 6 |
 
 Pour relire un fichier : `git show origin/main:src/app/api/market/route.ts`.
@@ -99,7 +100,14 @@ src/lib/domain/         Calculs financiers purs, sans dépendance à l'interface
   performance.ts        Performance pondérée par le temps, taux de rendement interne
   lookthrough.ts        Regard à travers les ETF : top réel, répartitions, recouvrement, frais, concentration
   life-slices.ts        « Morceaux de vie » : rendement attendu converti en dépenses couvertes
+  contributors.ts       Qui a fait la journée, ETF traversés
+  earnings.ts           Bénéfices réels : dividendes versés et bénéfices réinvestis
+  sentence.ts           Phrase du jour, sans IA
+  exchanges.ts          Places boursières et heures d'ouverture (globe)
+src/lib/analysis.ts     Assemble tous les calculs en un instantané pour l'interface
+src/lib/store.tsx       État de l'app : démo ou vrai portefeuille, mode discret, feuilles ouvertes
 src/lib/demo/           Portefeuille de démonstration fictif et déterministe
+src/components/         Coquille (aurore, barre flottante, feuilles), pages, graphes, globe
 src/lib/format.ts       Montants et pourcentages à la belge francophone
 ```
 

@@ -17,6 +17,14 @@ describe("portefeuille de démonstration", () => {
     expect(buildDemoPortfolio(AS_OF)).toEqual(demo);
   });
 
+  it("garde la même histoire quand la date d'arrêt avance", () => {
+    const later = buildDemoPortfolio("2026-12-31");
+    for (const [id, history] of Object.entries(demo.market.prices)) {
+      expect(later.market.prices[id].slice(0, history.length)).toEqual(history);
+    }
+    expect(later.transactions.slice(0, 50)).toEqual(demo.transactions.slice(0, 50));
+  });
+
   it("ne cote que les jours ouvrés", () => {
     expect(businessDays("2026-11-13", "2026-11-17")).toEqual(["2026-11-13", "2026-11-16", "2026-11-17"]);
     const days = tradingDates(demo.market, "2021-01-01", AS_OF);

@@ -26,6 +26,9 @@ export interface Instrument {
   country?: string;
   /** Indice auquel la ligne est rattachée pour rejouer les crises. */
   benchmark?: string;
+  /** Actions en direct : bénéfice par action / cours, et dividende / cours (ratios). */
+  earningsYield?: number;
+  dividendYield?: number;
 }
 
 export interface Transaction {
@@ -90,6 +93,9 @@ export interface FundComposition {
   expenseRatio?: number;
   /** Nombre total de lignes annoncé par l'émetteur. */
   holdingsCount?: number;
+  /** Rendement bénéficiaire et rendement en dividendes du panier détenu (ratios). */
+  earningsYield?: number;
+  dividendYield?: number;
 }
 
 export type Compositions = Record<string, FundComposition | undefined>;
