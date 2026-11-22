@@ -2,12 +2,13 @@
 
 import React from 'react';
 import { CATEGORY_COLORS } from '@/data/initialPortfolio';
+import { formatMoney } from '@/lib/formatters';
 
 interface SliceItem {
   label: string;
   valueEur: number;
   displayValue?: number;
-  unitSymbol?: string;
+  currency?: 'EUR' | 'USD';
 }
 
 interface DonutAllocationProps {
@@ -27,11 +28,6 @@ export default function DonutAllocation({ slices }: DonutAllocationProps) {
   const radius = 58;
   const circumference = 2 * Math.PI * radius;
   let offsetAcc = 0;
-  const firstUnit = slices[0]?.unitSymbol || '€';
-  const totalDisplay = slices.reduce(
-    (sum, s) => sum + Math.max(0, s.displayValue ?? s.valueEur),
-    0
-  );
 
   return (
     <div className="flex flex-col sm:flex-row items-center gap-6">
@@ -52,7 +48,7 @@ export default function DonutAllocation({ slices }: DonutAllocationProps) {
             const strokeDasharray = `${dash} ${circumference}`;
             const strokeDashoffset = -offsetAcc;
             offsetAcc += dash;
-            const color = CATEGORY_COLORS[s.label] || '#EA580C';
+            const color = CATEGORY_COLORS[s.label] || '#2563EB';
 
             return (
               <circle
@@ -73,9 +69,7 @@ export default function DonutAllocation({ slices }: DonutAllocationProps) {
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-1">
           <span className="text-[11px] text-slate-400">Total</span>
           <span className="text-xs font-bold">
-            {firstUnit === '$'
-              ? `$${totalDisplay.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}`
-              : `${totalDisplay.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`}
+            {formatMoney(totalEur, 'EUR', 0)}
           </span>
         </div>
       </div>
@@ -83,8 +77,8 @@ export default function DonutAllocation({ slices }: DonutAllocationProps) {
       <div className="flex-1 w-full space-y-2">
         {slices.map((s) => {
           const pct = ((s.valueEur / totalEur) * 100).toFixed(1);
-          const color = CATEGORY_COLORS[s.label] || '#EA580C';
-          const unit = s.unitSymbol || '€';
+          const color = CATEGORY_COLORS[s.label] || '#2563EB';
+          const cur = s.currency || 'EUR';
           const shownVal = s.displayValue ?? s.valueEur;
 
           return (
@@ -98,9 +92,7 @@ export default function DonutAllocation({ slices }: DonutAllocationProps) {
               </div>
               <div className="text-right">
                 <span className="font-semibold">
-                  {unit === '$'
-                    ? `$${shownVal.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}`
-                    : `${shownVal.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`}
+                  {formatMoney(shownVal, cur, 2)}
                 </span>
                 <span className="text-slate-400 ml-1.5">({pct}%)</span>
               </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -28,6 +28,7 @@ import {
   DEFAULT_INSTITUTIONS,
   INITIAL_HOLDINGS,
 } from '@/data/initialPortfolio';
+import { formatMoney, formatNumber, formatSignedMoney } from '@/lib/formatters';
 import {
   buildPortfolioSeries,
   enrichHoldings,
@@ -41,7 +42,7 @@ import {
   TimeframeKey,
 } from '@/types/portfolio';
 
-const HOLDINGS_STORAGE_KEY = 'wealthview_holdings_v4';
+const HOLDINGS_STORAGE_KEY = 'wealthview_holdings_v5';
 const INSTITUTIONS_STORAGE_KEY = 'wealthview_institutions_v1';
 const TIMEFRAMES: TimeframeKey[] = ['1J', '1S', '1M', 'YTD', 'LTM', '2A', '5A', '10A', 'Tout'];
 
@@ -67,6 +68,8 @@ export default function WealthAppPage() {
   const [timeframe, setTimeframe] = useState<TimeframeKey>('LTM');
   const [holdings, setHoldings] = useState<PortfolioHolding[]>(INITIAL_HOLDINGS);
   const [institutions, setInstitutions] = useState<string[]>(DEFAULT_INSTITUTIONS);
+
+  const quotesCacheRef = useRef<Partial<Record<TimeframeKey, Record<string, MarketQuoteResult>>>>({});
   const [quotes, setQuotes] = useState<Record<string, MarketQuoteResult>>({});
   const [eurUsdRate, setEurUsdRate] = useState<number>(1.0968);
   const [loadingQuotes, setLoadingQuotes] = useState<boolean>(false);
@@ -121,6 +124,7 @@ export default function WealthAppPage() {
   };
 
   const persistHoldings = (next: PortfolioHolding[]) => {
+    quotesCacheRef.current = {};
     setHoldings(next);
     try {
       localStorage.setItem(HOLDINGS_STORAGE_KEY, JSON.stringify(next));
@@ -128,13 +132,19 @@ export default function WealthAppPage() {
   };
 
   const refreshQuotes = useCallback(
-    async (items: PortfolioHolding[], tf: TimeframeKey) => {
+    async (items: PortfolioHolding[], tf: TimeframeKey, force = false) => {
+      if (!force && quotesCacheRef.current[tf]) {
+        setQuotes(quotesCacheRef.current[tf]!);
+        return;
+      }
+
       setLoadingQuotes(true);
       const { quotes: q, eurUsdRate: fxRate } = await fetchQuotesForHoldings(
         items,
         tf,
         clientNow
       );
+      quotesCacheRef.current[tf] = q;
       setQuotes(q);
       setEurUsdRate(fxRate);
       setLoadingQuotes(false);
@@ -144,7 +154,7 @@ export default function WealthAppPage() {
 
   useEffect(() => {
     if (unlocked) {
-      refreshQuotes(holdings, timeframe);
+      refreshQuotes(holdings, timeframe, false);
     }
   }, [unlocked, holdings, timeframe, refreshQuotes]);
 
@@ -179,6 +189,15 @@ export default function WealthAppPage() {
   }, [series, periodDeltaEur]);
 
   const groupedByCategory = useMemo(() => {
+    const categoryOrder: AssetCategory[] = [
+      'Actions',
+      'ETF',
+      'Fonds',
+      'Or / Matières premières',
+      'Cash',
+      'Crypto',
+    ];
+
     const map = new Map<
       AssetCategory,
       {
@@ -216,7 +235,11 @@ export default function WealthAppPage() {
         items: [...group.items].sort((a, b) => b.currentValueEur - a.currentValueEur),
         pnlPct: group.totalCostEur > 0 ? (group.pnlEur / group.totalCostEur) * 100 : 0,
       }))
-      .sort((a, b) => b.totalValueEur - a.totalValueEur);
+      .sort((a, b) => {
+        const ia = categoryOrder.indexOf(a.category);
+        const ib = categoryOrder.indexOf(b.category);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
   }, [enriched]);
 
   const categorySlices = useMemo(
@@ -225,23 +248,22 @@ export default function WealthAppPage() {
         label: g.category,
         valueEur: g.totalValueEur,
         displayValue: g.totalValueEur,
-        unitSymbol: '€',
+        currency: 'EUR' as const,
       })),
     [groupedByCategory]
   );
 
-  // Camembert devises : valeur affichée en $ pour USD et en € pour EUR
   const currencySlices = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<'EUR' | 'USD', number>();
     for (const h of enriched) {
       map.set(h.currency, (map.get(h.currency) || 0) + h.currentValueEur);
     }
     return Array.from(map.entries())
-      .map(([label, valueEur]) => ({
-        label,
+      .map(([cur, valueEur]) => ({
+        label: cur,
         valueEur,
-        displayValue: label === 'USD' ? valueEur * eurUsdRate : valueEur,
-        unitSymbol: label === 'USD' ? '$' : '€',
+        displayValue: cur === 'USD' ? valueEur * eurUsdRate : valueEur,
+        currency: cur,
       }))
       .sort((a, b) => b.valueEur - a.valueEur);
   }, [enriched, eurUsdRate]);
@@ -381,10 +403,9 @@ export default function WealthAppPage() {
       }}
       className="min-h-screen bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-white"
     >
-      {/* Header opaque net sans flou iOS */}
       <header
         style={{
-          paddingTop: 'max(2.65rem, calc(env(safe-area-inset-top) + 0.5rem))',
+          paddingTop: 'max(3rem, calc(env(safe-area-inset-top) + 0.75rem))',
         }}
         className="sticky top-0 z-30 bg-slate-50 dark:bg-[#090C12] border-b border-slate-200/80 dark:border-slate-800 px-4 pb-3"
       >
@@ -407,7 +428,7 @@ export default function WealthAppPage() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => refreshQuotes(holdings, timeframe)}
+              onClick={() => refreshQuotes(holdings, timeframe, true)}
               aria-label="Actualiser les cours"
               className="p-2.5 rounded-xl bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-200"
             >
@@ -437,18 +458,14 @@ export default function WealthAppPage() {
                     ? `Valeur au ${hoverPoint.date}`
                     : 'Valeur totale du portefeuille'}
                 </span>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold">
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-600/15 text-blue-700 dark:text-blue-400 font-semibold">
                   {holdings.length} actifs
                 </span>
               </div>
 
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold tracking-tight">
-                  {displayedValue.toLocaleString('fr-FR', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{' '}
-                  €
+                  {formatMoney(displayedValue, 'EUR', 2)}
                 </span>
               </div>
 
@@ -465,8 +482,7 @@ export default function WealthAppPage() {
                   ) : (
                     <ArrowDownRight className="w-3.5 h-3.5" />
                   )}
-                  {isDeltaPositive ? '+' : ''}
-                  {activeDeltaEur.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} € (
+                  {formatSignedMoney(activeDeltaEur, 'EUR', 2)} (
                   {isDeltaPositive ? '+' : ''}
                   {activeDeltaPct.toFixed(2)}%)
                 </span>
@@ -493,7 +509,7 @@ export default function WealthAppPage() {
                       onClick={() => setTimeframe(tf)}
                       className={`flex-1 min-w-[34px] py-1.5 rounded-xl text-[11px] font-bold transition ${
                         active
-                          ? 'bg-white dark:bg-[#1E2638] text-amber-600 dark:text-amber-400 shadow-xs'
+                          ? 'bg-white dark:bg-[#1E2638] text-blue-600 dark:text-blue-400 shadow-xs'
                           : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
@@ -504,29 +520,36 @@ export default function WealthAppPage() {
               </div>
             </section>
 
-            <section className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-white dark:bg-[#131823] p-4 border border-slate-200/70 dark:border-slate-800/80">
-                <span className="text-xs text-slate-400">Capital investi</span>
-                <p className="text-lg font-bold mt-1">
-                  {totalCostEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €
+            {/* Case Capital investi réduite (4 cols) et Plus-value latente élargie (8 cols) sur une seule ligne */}
+            <section className="grid grid-cols-12 gap-2.5">
+              <div className="col-span-4 rounded-2xl bg-white dark:bg-[#131823] px-3 py-3.5 border border-slate-200/70 dark:border-slate-800/80 min-w-0">
+                <span className="block text-[11px] text-slate-400 truncate">Capital investi</span>
+                <p className="text-sm font-bold mt-1 truncate">
+                  {formatMoney(totalCostEur, 'EUR', 2)}
                 </p>
               </div>
-              <div className="rounded-2xl bg-white dark:bg-[#131823] p-4 border border-slate-200/70 dark:border-slate-800/80">
-                <span className="text-xs text-slate-400">Plus-value latente</span>
-                <p
-                  className={`text-lg font-bold mt-1 ${
-                    totalPnlEur >= 0 ? 'text-emerald-500' : 'text-rose-500'
-                  }`}
-                >
-                  {totalPnlEur >= 0 ? '+' : ''}
-                  {totalPnlEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} € (
-                  {totalPnlPct >= 0 ? '+' : ''}
-                  {totalPnlPct.toFixed(1)}%)
-                </p>
+              <div className="col-span-8 rounded-2xl bg-white dark:bg-[#131823] px-3.5 py-3.5 border border-slate-200/70 dark:border-slate-800/80 min-w-0">
+                <span className="block text-[11px] text-slate-400 truncate">Plus-value latente</span>
+                <div className="mt-1 flex items-baseline gap-1.5 whitespace-nowrap overflow-hidden">
+                  <span
+                    className={`text-sm font-bold ${
+                      totalPnlEur >= 0 ? 'text-emerald-500' : 'text-rose-500'
+                    }`}
+                  >
+                    {formatSignedMoney(totalPnlEur, 'EUR', 2)}
+                  </span>
+                  <span
+                    className={`text-xs font-semibold ${
+                      totalPnlEur >= 0 ? 'text-emerald-500' : 'text-rose-500'
+                    }`}
+                  >
+                    ({totalPnlPct >= 0 ? '+' : ''}
+                    {totalPnlPct.toFixed(1)}%)
+                  </span>
+                </div>
               </div>
             </section>
 
-            {/* Positions regroupées par catégorie (sans bouton Ajouter, sans badge véhicule, uniquement devise) */}
             <section className="space-y-2.5">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold">Mes positions par catégorie</h2>
@@ -538,7 +561,7 @@ export default function WealthAppPage() {
               {groupedByCategory.map((group) => {
                 const isOpen = Boolean(openCategories[group.category]);
                 const groupPos = group.pnlEur >= 0;
-                const dotColor = CATEGORY_COLORS[group.category] || '#EA580C';
+                const dotColor = CATEGORY_COLORS[group.category] || '#2563EB';
 
                 return (
                   <div
@@ -571,10 +594,7 @@ export default function WealthAppPage() {
 
                       <div className="text-right">
                         <p className="text-sm font-bold">
-                          {group.totalValueEur.toLocaleString('fr-FR', {
-                            maximumFractionDigits: 2,
-                          })}{' '}
-                          €
+                          {formatMoney(group.totalValueEur, 'EUR', 2)}
                         </p>
                         <p
                           className={`text-xs font-semibold ${
@@ -612,20 +632,14 @@ export default function WealthAppPage() {
                                   </span>
                                 </div>
                                 <p className="text-[11px] text-slate-400 mt-0.5">
-                                  {item.quantity} ×{' '}
-                                  {item.currentPriceEur.toLocaleString('fr-FR', {
-                                    maximumFractionDigits: 2,
-                                  })}{' '}
-                                  €
+                                  {formatNumber(item.quantity, 4)} ×{' '}
+                                  {formatMoney(item.currentPriceEur, 'EUR', 2)}
                                 </p>
                               </div>
 
                               <div className="text-right shrink-0">
                                 <p className="text-xs font-bold">
-                                  {item.currentValueEur.toLocaleString('fr-FR', {
-                                    maximumFractionDigits: 2,
-                                  })}{' '}
-                                  €
+                                  {formatMoney(item.currentValueEur, 'EUR', 2)}
                                 </p>
                                 <p
                                   className={`text-[11px] font-semibold ${
@@ -678,13 +692,12 @@ export default function WealthAppPage() {
                     <div className="flex justify-between text-xs font-medium">
                       <span>{g.institution}</span>
                       <span>
-                        {g.valueEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} € (
-                        {pct.toFixed(1)}%)
+                        {formatMoney(g.valueEur, 'EUR', 2)} ({pct.toFixed(1)}%)
                       </span>
                     </div>
                     <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                       <div
-                        className="h-full bg-amber-600 dark:bg-amber-500 rounded-full"
+                        className="h-full bg-blue-600 dark:bg-blue-500 rounded-full"
                         style={{ width: `${Math.min(100, pct)}%` }}
                       />
                     </div>
@@ -693,7 +706,6 @@ export default function WealthAppPage() {
               })}
             </section>
 
-            {/* Investissements regroupés dans le même ordre de catégories que la page 1, séparés uniquement par des titres */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold">Gérer mes investissements</h2>
@@ -703,7 +715,7 @@ export default function WealthAppPage() {
                     setEditingHolding(null);
                     setModalOpen(true);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-semibold"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-semibold"
                 >
                   <Plus className="w-3.5 h-3.5" /> Nouvel actif
                 </button>
@@ -731,20 +743,13 @@ export default function WealthAppPage() {
                             </span>
                           </div>
                           <p className="text-xs text-slate-400">
-                            {item.institution} • PRU{' '}
-                            {item.buyPriceEur.toLocaleString('fr-FR', {
-                              maximumFractionDigits: 2,
-                            })}{' '}
-                            €
+                            {item.institution} • PRU {formatMoney(item.buyPriceEur, 'EUR', 2)}
                           </p>
                         </div>
 
                         <div className="flex items-center gap-3 shrink-0">
                           <span className="text-sm font-bold">
-                            {item.currentValueEur.toLocaleString('fr-FR', {
-                              maximumFractionDigits: 0,
-                            })}{' '}
-                            €
+                            {formatMoney(item.currentValueEur, 'EUR', 2)}
                           </span>
                           <button
                             type="button"
@@ -780,7 +785,7 @@ export default function WealthAppPage() {
                 type="button"
                 onClick={loadAiNews}
                 disabled={loadingNews}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-semibold disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-semibold disabled:opacity-50"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 {loadingNews ? 'Analyse...' : 'Actualiser'}
@@ -798,7 +803,7 @@ export default function WealthAppPage() {
                   className="rounded-2xl bg-white dark:bg-[#131823] p-4 border border-slate-200/70 dark:border-slate-800/80 space-y-1.5"
                 >
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-amber-600 dark:text-amber-400">
+                    <span className="font-bold text-blue-600 dark:text-blue-400">
                       {n.asset}
                     </span>
                     <span
@@ -823,7 +828,6 @@ export default function WealthAppPage() {
           </section>
         )}
 
-        {/* Page 4 : chat compact au-dessus de la barre de navigation */}
         {activeTab === 'conseiller' && (
           <section
             style={{
@@ -840,7 +844,7 @@ export default function WealthAppPage() {
                   <div
                     className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
                       m.role === 'user'
-                        ? 'bg-amber-600 text-white'
+                        ? 'bg-blue-600 text-white'
                         : 'bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80'
                     }`}
                   >
@@ -861,12 +865,12 @@ export default function WealthAppPage() {
                 placeholder="Ex. Suis-je trop exposé à la tech US ?"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                className="flex-1 rounded-2xl px-4 py-2.5 text-xs bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 outline-none focus:border-amber-600"
+                className="flex-1 rounded-2xl px-4 py-2.5 text-xs bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 outline-none focus:border-blue-600"
               />
               <button
                 type="submit"
                 disabled={sendingChat}
-                className="p-2.5 rounded-2xl bg-amber-600 text-white disabled:opacity-50"
+                className="p-2.5 rounded-2xl bg-blue-600 text-white disabled:opacity-50"
                 aria-label="Envoyer"
               >
                 <Send className="w-4 h-4" />
@@ -885,7 +889,7 @@ export default function WealthAppPage() {
             type="button"
             onClick={() => setActiveTab('synthese')}
             className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
-              activeTab === 'synthese' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'
+              activeTab === 'synthese' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'
             }`}
           >
             <LayoutDashboard className="w-5 h-5" />
@@ -897,7 +901,7 @@ export default function WealthAppPage() {
             onClick={() => setActiveTab('portefeuille')}
             className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
               activeTab === 'portefeuille'
-                ? 'text-amber-600 dark:text-amber-400'
+                ? 'text-blue-600 dark:text-blue-400'
                 : 'text-slate-400'
             }`}
           >
@@ -909,7 +913,7 @@ export default function WealthAppPage() {
             type="button"
             onClick={() => setActiveTab('actus')}
             className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
-              activeTab === 'actus' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'
+              activeTab === 'actus' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'
             }`}
           >
             <Newspaper className="w-5 h-5" />
@@ -921,7 +925,7 @@ export default function WealthAppPage() {
             onClick={() => setActiveTab('conseiller')}
             className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
               activeTab === 'conseiller'
-                ? 'text-amber-600 dark:text-amber-400'
+                ? 'text-blue-600 dark:text-blue-400'
                 : 'text-slate-400'
             }`}
           >

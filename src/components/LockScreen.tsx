@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Delete, Lock, ScanFace, ShieldCheck } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Delete, ScanFace } from 'lucide-react';
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -19,83 +19,14 @@ export async function hashPin(pin: string): Promise<string> {
 }
 
 export default function LockScreen({ onUnlock }: LockScreenProps) {
-  const [hasSavedPin, setHasSavedPin] = useState<boolean>(false);
   const [hasBiometric, setHasBiometric] = useState<boolean>(false);
   const [pin, setPin] = useState<string>('');
   const [confirmPin, setConfirmPin] = useState<string>('');
   const [step, setStep] = useState<'create' | 'confirm' | 'verify'>('verify');
   const [error, setError] = useState<string>('');
+  const autoTriggeredRef = useRef<boolean>(false);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(PIN_STORAGE_KEY);
-    const bio = localStorage.getItem(BIOMETRIC_CRED_KEY);
-    setHasBiometric(Boolean(bio));
-    if (saved) {
-      setHasSavedPin(true);
-      setStep('verify');
-    } else {
-      setHasSavedPin(false);
-      setStep('create');
-    }
-  }, []);
-
-  const handleDigit = async (digit: string) => {
-    setError('');
-    if (step === 'create') {
-      const next = pin + digit;
-      if (next.length < 4) {
-        setPin(next);
-      } else {
-        setConfirmPin(next);
-        setPin('');
-        setStep('confirm');
-      }
-      return;
-    }
-
-    if (step === 'confirm') {
-      const next = pin + digit;
-      if (next.length < 4) {
-        setPin(next);
-      } else {
-        if (next === confirmPin) {
-          const hashed = await hashPin(next);
-          localStorage.setItem(PIN_STORAGE_KEY, hashed);
-          setHasSavedPin(true);
-          setPin('');
-          onUnlock();
-        } else {
-          setPin('');
-          setConfirmPin('');
-          setStep('create');
-          setError('Les codes ne correspondent pas. Recommencez.');
-        }
-      }
-      return;
-    }
-
-    const next = pin + digit;
-    if (next.length < 4) {
-      setPin(next);
-    } else {
-      const hashed = await hashPin(next);
-      const saved = localStorage.getItem(PIN_STORAGE_KEY);
-      if (saved && hashed === saved) {
-        setPin('');
-        onUnlock();
-      } else {
-        setPin('');
-        setError('Code PIN incorrect.');
-      }
-    }
-  };
-
-  const handleBackspace = () => {
-    setError('');
-    setPin((prev) => prev.slice(0, -1));
-  };
-
-  const handleBiometricAuth = async () => {
+  const handleBiometricAuth = useCallback(async () => {
     setError('');
     if (typeof window === 'undefined' || !window.PublicKeyCredential) {
       setError('Face ID non disponible sur ce navigateur.');
@@ -159,8 +90,82 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         }
       }
     } catch {
-      setError('Face ID annulé ou indisponible. Utilisez le code PIN.');
+      setError('Face ID annulé ou indisponible. Utilisez votre code PIN.');
     }
+  }, [onUnlock]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(PIN_STORAGE_KEY);
+    const bio = localStorage.getItem(BIOMETRIC_CRED_KEY);
+    setHasBiometric(Boolean(bio));
+    if (saved) {
+      setStep('verify');
+    } else {
+      setStep('create');
+    }
+
+    if (bio && !autoTriggeredRef.current) {
+      autoTriggeredRef.current = true;
+      const timer = setTimeout(() => {
+        handleBiometricAuth();
+      }, 250);
+      return () => clearTimeout(timer);
+    }
+  }, [handleBiometricAuth]);
+
+  const handleDigit = async (digit: string) => {
+    setError('');
+    if (step === 'create') {
+      const next = pin + digit;
+      if (next.length < 4) {
+        setPin(next);
+      } else {
+        setConfirmPin(next);
+        setPin('');
+        setStep('confirm');
+      }
+      return;
+    }
+
+    if (step === 'confirm') {
+      const next = pin + digit;
+      if (next.length < 4) {
+        setPin(next);
+      } else {
+        if (next === confirmPin) {
+          const hashed = await hashPin(next);
+          localStorage.setItem(PIN_STORAGE_KEY, hashed);
+          setPin('');
+          onUnlock();
+        } else {
+          setPin('');
+          setConfirmPin('');
+          setStep('create');
+          setError('Les codes ne correspondent pas. Recommencez.');
+        }
+      }
+      return;
+    }
+
+    const next = pin + digit;
+    if (next.length < 4) {
+      setPin(next);
+    } else {
+      const hashed = await hashPin(next);
+      const saved = localStorage.getItem(PIN_STORAGE_KEY);
+      if (saved && hashed === saved) {
+        setPin('');
+        onUnlock();
+      } else {
+        setPin('');
+        setError('Code PIN incorrect.');
+      }
+    }
+  };
+
+  const handleBackspace = () => {
+    setError('');
+    setPin((prev) => prev.slice(0, -1));
   };
 
   const titleText =
@@ -168,34 +173,27 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       ? 'Créer votre code à 4 chiffres'
       : step === 'confirm'
       ? 'Confirmez votre code PIN'
-      : 'Déverrouiller WealthView';
+      : 'WealthView';
 
   return (
     <div
       style={{
-        paddingTop: 'max(2.75rem, env(safe-area-inset-top))',
+        paddingTop: 'max(4rem, calc(env(safe-area-inset-top) + 1.5rem))',
         paddingBottom: 'max(2rem, env(safe-area-inset-bottom))',
       }}
-      className="min-h-screen flex flex-col items-center justify-between px-6 bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-white select-none"
+      className="min-h-screen flex flex-col justify-between px-6 bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-white select-none"
     >
-      <div className="flex flex-col items-center text-center mt-4">
-        <div className="w-14 h-14 rounded-2xl bg-[#0A1628] border border-blue-500/30 flex items-center justify-center mb-4 shadow-md">
-          {hasSavedPin ? (
-            <Lock className="w-7 h-7 text-sky-400" />
-          ) : (
-            <ShieldCheck className="w-7 h-7 text-sky-400" />
-          )}
-        </div>
-        <h1 className="text-xl font-bold tracking-tight">{titleText}</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-xs">
+      <div className="flex flex-col items-center text-center mt-6">
+        <h1 className="text-2xl font-bold tracking-tight">{titleText}</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 max-w-xs">
           {step === 'create'
-            ? 'Protégez l’accès à votre patrimoine multi-comptes sur cet appareil.'
+            ? 'Définissez un code PIN pour protéger votre patrimoine.'
             : step === 'confirm'
             ? 'Saisissez exactement le même code à 4 chiffres.'
-            : 'Entrez votre code PIN ou utilisez Face ID.'}
+            : 'Entrez votre code PIN ou utilisez Face ID'}
         </p>
 
-        <div className="flex gap-4 mt-7">
+        <div className="flex gap-4 mt-8">
           {[0, 1, 2, 3].map((idx) => {
             const filled = idx < pin.length;
             return (
@@ -203,7 +201,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                 key={idx}
                 className={`w-4 h-4 rounded-full transition-all duration-150 ${
                   filled
-                    ? 'bg-blue-600 dark:bg-sky-400 scale-110'
+                    ? 'bg-blue-600 dark:bg-blue-400 scale-110'
                     : 'border-2 border-slate-300 dark:border-slate-700'
                 }`}
               />
@@ -216,7 +214,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         )}
       </div>
 
-      <div className="w-full max-w-xs">
+      <div className="w-full max-w-xs mx-auto mt-auto pt-10">
         <div className="grid grid-cols-3 gap-4">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
             <button
@@ -233,7 +231,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
             type="button"
             onClick={handleBiometricAuth}
             aria-label="Face ID"
-            className="h-16 rounded-2xl bg-blue-950/10 dark:bg-sky-500/15 text-blue-900 dark:text-sky-400 flex flex-col items-center justify-center active:scale-95 transition"
+            className="h-16 rounded-2xl bg-blue-600/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 flex flex-col items-center justify-center active:scale-95 transition"
           >
             <ScanFace className="w-6 h-6" />
             <span className="text-[10px] font-semibold mt-0.5">
@@ -258,11 +256,11 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
             <Delete className="w-6 h-6" />
           </button>
         </div>
-      </div>
 
-      <p className="text-[11px] text-slate-400 dark:text-slate-500">
-        Données stockées localement sur votre iPhone
-      </p>
+        <p className="text-[11px] text-center text-slate-400 dark:text-slate-500 mt-6">
+          Données stockées localement sur votre iPhone
+        </p>
+      </div>
     </div>
   );
 }

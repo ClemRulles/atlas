@@ -20,9 +20,12 @@ interface InteractiveChartProps {
   onRangeSelect?: (range: RangeSelection | null) => void;
 }
 
-function formatShortDate(isoDate: string): string {
-  const parts = isoDate.split('-');
-  if (parts.length !== 3) return isoDate;
+function formatAxisLabel(rawDate: string): string {
+  if (rawDate.includes(' ')) {
+    return rawDate.split(' ')[1].slice(0, 5);
+  }
+  const parts = rawDate.split('-');
+  if (parts.length !== 3) return rawDate;
   const [, month, day] = parts;
   const yearShort = parts[0].slice(2);
   return `${day}/${month}/${yearShort}`;
@@ -139,9 +142,9 @@ export default function InteractiveChart({
   const rangeEndCoord = rangeIndices ? coords[rangeIndices[1]] : null;
 
   const midIdx = Math.floor((data.length - 1) / 2);
-  const startLabel = formatShortDate(data[0].date);
-  const midLabel = formatShortDate(data[midIdx].date);
-  const endLabel = formatShortDate(data[data.length - 1].date);
+  const startLabel = formatAxisLabel(data[0].date);
+  const midLabel = formatAxisLabel(data[midIdx].date);
+  const endLabel = formatAxisLabel(data[data.length - 1].date);
 
   return (
     <div className="relative w-full">
@@ -244,10 +247,9 @@ export default function InteractiveChart({
         )}
       </svg>
 
-      {/* Axe des abscisses (échelle de temps) */}
       <div className="mt-1 pt-1.5 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between text-[10px] font-medium text-slate-400">
         <span>{startLabel}</span>
-        <span>{activeIndex !== null ? formatShortDate(data[activeIndex].date) : midLabel}</span>
+        <span>{activeIndex !== null ? formatAxisLabel(data[activeIndex].date) : midLabel}</span>
         <span>{endLabel}</span>
       </div>
     </div>
