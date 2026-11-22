@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import yahooFinance from 'yahoo-finance2';
 
 interface MarketPoint {
   date: string;
@@ -15,6 +14,12 @@ interface ResolvedQuote {
   history: MarketPoint[];
   source: 'yahoo';
 }
+
+const BROWSER_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  Accept: 'application/json',
+};
 
 function toTwelveDataSymbol(rawSym: string): string {
   const sym = rawSym.trim().toUpperCase();
@@ -51,33 +56,25 @@ function getTwelveDataParams(timeframe: string): { interval: string; outputsize:
   }
 }
 
-function getYahooPeriodStart(timeframe: string, now: Date): Date {
-  const d = new Date(now);
+function getYahooRangeAndInterval(timeframe: string): { range: string; interval: string } {
   switch (timeframe) {
     case '1S':
-      d.setDate(now.getDate() - 10);
-      return d;
+      return { range: '5d', interval: '1h' };
     case '1M':
-      d.setMonth(now.getMonth() - 1);
-      return d;
+      return { range: '1mo', interval: '1d' };
     case 'YTD':
-      return new Date(now.getFullYear(), 0, 1);
+      return { range: 'ytd', interval: '1d' };
     case 'LTM':
-      d.setFullYear(now.getFullYear() - 1);
-      return d;
+      return { range: '1y', interval: '1d' };
     case '2A':
-      d.setFullYear(now.getFullYear() - 2);
-      return d;
+      return { range: '2y', interval: '1wk' };
     case '5A':
-      d.setFullYear(now.getFullYear() - 5);
-      return d;
+      return { range: '5y', interval: '1wk' };
     case '10A':
-      d.setFullYear(now.getFullYear() - 10);
-      return d;
+      return { range: '10y', interval: '1mo' };
     case 'Tout':
     default:
-      d.setFullYear(now.getFullYear() - 25);
-      return d;
+      return { range: 'max', interval: '1mo' };
   }
 }
 
@@ -143,65 +140,74 @@ async function fetchFromTwelveData(
   }
 }
 
-async function fetchFromYahoo(
+async function fetchFromYahooDirect(
   origSym: string,
   timeframe: string,
   eurUsdRate: number
 ): Promise<ResolvedQuote | null> {
   try {
-    const now = new Date();
-    const period1 = getYahooPeriodStart(timeframe, now);
-    const interval = ['2A', '5A', '10A', 'Tout'].includes(timeframe) ? '1wk' : '1d';
+    const { range, interval } = getYahooRangeAndInterval(timeframe);
+    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+      origSym
+    )}?range=${range}&interval=${interval}&includePrePost=false`;
 
-    const quote = (await yahooFinance.quote(origSym)) as {
-      regularMarketPrice?: number;
-      regularMarketPreviousClose?: number;
-      currency?: string;
-      shortName?: string;
-      longName?: string;
-    } | null;
+    const res = await fetch(chartUrl, {
+      headers: BROWSER_HEADERS,
+      cache: 'no-store',
+    });
 
-    if (!quote || typeof quote.regularMarketPrice !== 'number' || quote.regularMarketPrice <= 0) {
-      return null;
-    }
+    if (!res.ok) return null;
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    if (!result) return null;
 
-    const currency: 'EUR' | 'USD' =
-      (quote.currency || 'EUR').toUpperCase() === 'USD' ? 'USD' : 'EUR';
+    const meta = result.meta || {};
+    const rawCurrency = String(meta.currency || 'USD').toUpperCase();
+    const currency: 'EUR' | 'USD' = rawCurrency === 'USD' ? 'USD' : 'EUR';
     const toEur = (val: number) => (currency === 'USD' ? val / eurUsdRate : val);
 
-    const priceEur = Number(toEur(quote.regularMarketPrice).toFixed(4));
-    const prevRaw = quote.regularMarketPreviousClose ?? quote.regularMarketPrice;
-    const previousCloseEur = Number(toEur(prevRaw).toFixed(4));
+    const timestamps: number[] = Array.isArray(result.timestamp) ? result.timestamp : [];
+    const closes: Array<number | null> =
+      result?.indicators?.quote?.[0]?.close || [];
 
-    let history: MarketPoint[] = [];
-    try {
-      const chart = (await yahooFinance.chart(origSym, {
-        period1,
-        period2: now,
-        interval,
-      })) as {
-        quotes?: Array<{ close?: number | null; date?: Date | string | null }>;
-      } | null;
-
-      if (chart?.quotes?.length) {
-        history = chart.quotes
-          .filter((q) => typeof q.close === 'number' && q.close > 0 && Boolean(q.date))
-          .map((q) => ({
-            date: new Date(q.date as Date | string).toISOString().slice(0, 10),
-            priceEur: Number(toEur(q.close as number).toFixed(4)),
-          }));
+    const history: MarketPoint[] = [];
+    for (let i = 0; i < timestamps.length; i++) {
+      const c = closes[i];
+      if (typeof c === 'number' && c > 0 && typeof timestamps[i] === 'number') {
+        const dt = new Date(timestamps[i] * 1000);
+        history.push({
+          date: dt.toISOString().slice(0, 10),
+          priceEur: Number(toEur(c).toFixed(4)),
+        });
       }
-    } catch {
-      // Historique optionnel si seul le cours actuel répond
     }
 
+    const marketPriceRaw =
+      typeof meta.regularMarketPrice === 'number' && meta.regularMarketPrice > 0
+        ? meta.regularMarketPrice
+        : history.length > 0
+        ? closes.filter((v): v is number => typeof v === 'number' && v > 0).pop() || 0
+        : 0;
+
+    if (marketPriceRaw <= 0) return null;
+
+    const priceEur = Number(toEur(marketPriceRaw).toFixed(4));
+    const prevRaw =
+      typeof meta.chartPreviousClose === 'number' && meta.chartPreviousClose > 0
+        ? meta.chartPreviousClose
+        : marketPriceRaw;
+    const previousCloseEur = Number(toEur(prevRaw).toFixed(4));
+
     if (history.length === 0) {
-      history = [{ date: now.toISOString().slice(0, 10), priceEur }];
+      history.push({
+        date: new Date().toISOString().slice(0, 10),
+        priceEur,
+      });
     }
 
     return {
       symbol: origSym,
-      name: quote.longName || quote.shortName || origSym,
+      name: String(meta.longName || meta.shortName || origSym),
       currency,
       priceEur,
       previousCloseEur,
@@ -222,7 +228,7 @@ export async function POST(req: NextRequest) {
 
     let eurUsdRate = 1.0968;
 
-    // 1. Taux de change EUR/USD : Twelve Data puis secours Yahoo
+    // 1. Taux EUR/USD : Twelve Data puis Yahoo Chart direct
     let fxResolved = false;
     if (apiKey) {
       try {
@@ -241,17 +247,22 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch {
-        // Passe au secours Yahoo
+        // Passe à Yahoo
       }
     }
 
     if (!fxResolved) {
       try {
-        const fxYahoo = (await yahooFinance.quote('EURUSD=X')) as {
-          regularMarketPrice?: number;
-        } | null;
-        if (fxYahoo && typeof fxYahoo.regularMarketPrice === 'number' && fxYahoo.regularMarketPrice > 0) {
-          eurUsdRate = fxYahoo.regularMarketPrice;
+        const fxYahooRes = await fetch(
+          'https://query1.finance.yahoo.com/v8/finance/chart/EURUSD=X?range=5d&interval=1d',
+          { headers: BROWSER_HEADERS, cache: 'no-store' }
+        );
+        if (fxYahooRes.ok) {
+          const fxJson = await fxYahooRes.json();
+          const rate = fxJson?.chart?.result?.[0]?.meta?.regularMarketPrice;
+          if (typeof rate === 'number' && rate > 0) {
+            eurUsdRate = rate;
+          }
         }
       } catch {
         // Garde 1.0968
@@ -264,25 +275,27 @@ export async function POST(req: NextRequest) {
 
     const quotes: Record<string, ResolvedQuote> = {};
 
-    // 2. Cascade par position : Twelve Data -> Yahoo Finance -> (client fallback manuel)
-    for (const rawSym of symbols) {
-      const origSym = rawSym.trim().toUpperCase();
-      if (!origSym) continue;
+    // 2. Cascade : Twelve Data -> Yahoo Chart direct -> (repli manuel client si introuvable)
+    await Promise.all(
+      symbols.map(async (rawSym) => {
+        const origSym = rawSym.trim().toUpperCase();
+        if (!origSym) return;
 
-      let resolved: ResolvedQuote | null = null;
+        let resolved: ResolvedQuote | null = null;
 
-      if (apiKey) {
-        resolved = await fetchFromTwelveData(origSym, timeframe, apiKey, eurUsdRate);
-      }
+        if (apiKey) {
+          resolved = await fetchFromTwelveData(origSym, timeframe, apiKey, eurUsdRate);
+        }
 
-      if (!resolved) {
-        resolved = await fetchFromYahoo(origSym, timeframe, eurUsdRate);
-      }
+        if (!resolved) {
+          resolved = await fetchFromYahooDirect(origSym, timeframe, eurUsdRate);
+        }
 
-      if (resolved) {
-        quotes[origSym] = resolved;
-      }
-    }
+        if (resolved) {
+          quotes[origSym] = resolved;
+        }
+      })
+    );
 
     return NextResponse.json({ quotes, eurUsdRate });
   } catch {
