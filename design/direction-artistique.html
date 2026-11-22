@@ -1,0 +1,592 @@
+<title>Atlas Nuit boréale</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..500&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&display=swap">
+<style>
+/* Mise en page : la maquette vivante de l'écran « Aujourd'hui » au format téléphone à gauche,
+   les règles de la direction à droite ; sur mobile tout s'empile, réglages puis maquette puis règles. */
+@property --a1 { syntax: '<color>'; inherits: true; initial-value: #19e6a6; }
+@property --a2 { syntax: '<color>'; inherits: true; initial-value: #2bb5ff; }
+@property --a3 { syntax: '<color>'; inherits: true; initial-value: #7a5cff; }
+@property --mood { syntax: '<color>'; inherits: true; initial-value: #4de5b2; }
+
+:root {
+  color-scheme: dark;
+  /* Couleur : un fond qui ne change jamais, une lumière qui change */
+  --nuit: #06070b;
+  --encre: #0c0e15;
+  --encre-2: #131620;
+  --verre: rgba(255, 255, 255, .055);
+  --verre-fort: rgba(255, 255, 255, .1);
+  --lisere: rgba(255, 255, 255, .1);
+  --texte: #f3f4f8;
+  --texte-2: #a9aebf;
+  --texte-3: #737890;
+  --lumiere: #ffffff;
+  --lavande: #b4b8ff;
+  --hausse: #4de5b2;
+  --calme: #9aa0ff;
+  --baisse: #ff7a6b;
+  --h1: #19e6a6; --h2: #2bb5ff; --h3: #7a5cff;
+  --c1: #5b6bff; --c2: #9a6bff; --c3: #2b8cff;
+  --b1: #ff5e7a; --b2: #ff9a5c; --b3: #a04cff;
+  /* Données : 8 teintes dans un ordre fixe, validées daltonisme sur fond sombre */
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+  /* Typographie : la voix (serif), les chiffres (grotesque tabulaire), les repères (mono) */
+  --serif: "Newsreader", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r-xl: 28px; --r-lg: 20px; --r-md: 14px;
+  --ressort: cubic-bezier(.16, 1, .3, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body { background: var(--nuit); color: var(--texte); font-family: var(--sans); font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid var(--lavande); outline-offset: 3px; border-radius: 8px; }
+ul { list-style: none; margin: 0; padding: 0; }
+h1, h2, h3, p { margin: 0; }
+
+.da { position: relative; transition: --a1 1.4s ease, --a2 1.4s ease, --a3 1.4s ease, --mood .9s ease; }
+.da[data-humeur="hausse"] { --a1: var(--h1); --a2: var(--h2); --a3: var(--h3); --mood: var(--hausse); }
+.da[data-humeur="calme"]  { --a1: var(--c1); --a2: var(--c2); --a3: var(--c3); --mood: var(--calme); }
+.da[data-humeur="baisse"] { --a1: var(--b1); --a2: var(--b2); --a3: var(--b3); --mood: var(--baisse); }
+.lueur { position: absolute; inset: 0 0 auto 0; height: 560px; pointer-events: none;
+  background: radial-gradient(70% 100% at 22% 0%, color-mix(in oklab, var(--a1) 13%, transparent), transparent 72%),
+              radial-gradient(60% 90% at 88% 0%, color-mix(in oklab, var(--a3) 11%, transparent), transparent 70%); }
+
+.page { position: relative; max-width: 1140px; margin: 0 auto; padding-block: 36px 96px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 28px; }
+@media (min-width: 940px) {
+  .page { display: grid; grid-template-columns: 400px minmax(0, 1fr); column-gap: 72px; row-gap: 32px; align-items: start; padding-block: 64px 120px; }
+  .ecran { grid-column: 1; grid-row: 1 / span 3; }
+  .tete, .reglages, .regles { grid-column: 2; }
+}
+
+.mono { font-family: var(--mono); font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--texte-3); }
+.t2 { color: var(--texte-2); } .t3 { color: var(--texte-3); }
+
+/* En-tête */
+.tete { display: flex; flex-direction: column; gap: 14px; }
+.tete h1 { font-family: var(--serif); font-weight: 300; font-style: italic; font-size: clamp(52px, 9vw, 88px); line-height: .95; letter-spacing: -.02em; text-wrap: balance; }
+.tete p { max-width: 34em; color: var(--texte-2); font-size: 17px; }
+
+/* Réglages */
+.reglages { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; padding: 4px; border-radius: 999px; background: var(--verre); border: 1px solid var(--lisere); }
+.seg button { display: inline-flex; align-items: center; gap: 8px; padding: 9px 15px; border-radius: 999px; font-size: 14px; color: var(--texte-2); transition: background .3s var(--ressort), color .3s; }
+.seg button i { width: 8px; height: 8px; border-radius: 50%; }
+.seg button[aria-pressed="true"] { background: var(--verre-fort); color: var(--texte); }
+.pastille { padding: 12px 17px; border-radius: 999px; border: 1px solid var(--lisere); background: var(--verre); font-size: 14px; color: var(--texte-2); transition: transform .25s var(--ressort), background .3s, color .3s; }
+.pastille:active, .seg button:active, .dock button:active, .periodes button:active { transform: scale(.96); }
+.pastille[aria-pressed="true"] { background: var(--lumiere); color: var(--nuit); border-color: transparent; }
+
+/* ——— La maquette ——— */
+.ecran { position: relative; width: 100%; max-width: 400px; margin-inline: auto; border-radius: 40px; background: var(--nuit); border: 1px solid var(--lisere); overflow: clip; box-shadow: 0 40px 120px -40px color-mix(in oklab, var(--a1) 35%, transparent), 0 0 0 8px rgba(255, 255, 255, .025); }
+.aurore { position: absolute; inset: 0 0 auto 0; height: 540px; overflow: hidden; pointer-events: none; }
+.aurore i { position: absolute; border-radius: 50%; filter: blur(52px); will-change: transform; }
+.aurore i:nth-child(1) { width: 92%; height: 210px; left: -30%; top: -40px; background: var(--a1); opacity: .62; transform: rotate(-16deg); animation: derive-a 26s ease-in-out infinite alternate; }
+.aurore i:nth-child(2) { width: 84%; height: 190px; right: -34%; top: 10px; background: var(--a2); opacity: .44; transform: rotate(14deg); animation: derive-b 33s ease-in-out infinite alternate; }
+.aurore i:nth-child(3) { width: 70%; height: 170px; left: 14%; top: 120px; background: var(--a3); opacity: .3; transform: rotate(-8deg); animation: derive-c 41s ease-in-out infinite alternate; }
+.aurore::before { content: ""; position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, rgba(6, 7, 11, 0) 0%, rgba(6, 7, 11, .35) 42%, var(--nuit) 92%); }
+.aurore::after { content: ""; position: absolute; inset: 0; z-index: 2; opacity: .5; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+@keyframes derive-a { to { transform: rotate(-10deg) translate(18%, 26px) scale(1.08); } }
+@keyframes derive-b { to { transform: rotate(8deg) translate(-22%, 34px) scale(1.12); } }
+@keyframes derive-c { to { transform: rotate(-14deg) translate(12%, -30px) scale(.94); } }
+
+.ecran-in { position: relative; z-index: 1; padding: 22px 20px 12px; display: flex; flex-direction: column; gap: 26px; }
+.arrive { animation: arrive .8s var(--ressort) both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes arrive { from { opacity: 0; transform: translateY(16px); filter: blur(8px); } }
+
+.barre { display: flex; justify-content: space-between; align-items: center; }
+.rond { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: var(--verre); border: 1px solid var(--lisere); backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%); color: var(--texte-2); transition: transform .25s var(--ressort), background .3s, color .3s; }
+.rond[aria-pressed="true"] { background: var(--lumiere); color: var(--nuit); }
+svg.ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.phrase { font-family: var(--serif); font-weight: 350; font-size: clamp(27px, 7.6vw, 31px); line-height: 1.16; letter-spacing: -.012em; text-wrap: pretty; min-height: 4.6em; }
+.phrase .mot { display: inline-block; animation: mot .7s var(--ressort) both; animation-delay: calc(120ms + var(--i) * 36ms); }
+@keyframes mot { from { opacity: 0; transform: translateY(10px); filter: blur(6px); } }
+.phrase .cle { color: var(--mood); font-style: italic; font-weight: 500; }
+.phrase .nom { font-style: italic; }
+
+.amt { white-space: nowrap; transition: filter .45s var(--ressort), opacity .45s; }
+.discret .amt { filter: blur(.42em); opacity: .75; user-select: none; }
+
+.total { display: flex; flex-direction: column; gap: 8px; }
+.chiffre { display: flex; align-items: flex-end; font-weight: 500; font-size: clamp(44px, 13.4vw, 56px); letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.odo { display: inline-flex; line-height: 1; }
+.od-d { display: block; height: 1em; overflow: hidden; }
+.od-col { display: flex; flex-direction: column; transition: transform 1.15s var(--ressort); }
+.od-col span, .od-s { display: block; height: 1em; line-height: 1; }
+.od-s { white-space: pre; }
+.odo.dec { font-size: .46em; color: var(--texte-2); letter-spacing: -.02em; margin: 0 0 .24em .12em; font-weight: 400; }
+.delta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 15px; font-variant-numeric: tabular-nums; }
+.delta .var { color: var(--mood); font-weight: 500; }
+.delta .fl { font-size: .72em; margin-right: 2px; }
+
+.graphe { display: flex; flex-direction: column; gap: 12px; }
+.lecture { display: flex; justify-content: space-between; gap: 12px; min-height: 16px; text-transform: none; letter-spacing: .02em; font-size: 12px; color: var(--texte-2); font-variant-numeric: tabular-nums; }
+.zone { position: relative; height: 150px; touch-action: pan-y; cursor: crosshair; }
+.zone svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+#ligne { fill: none; stroke: var(--lumiere); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 0; transition: stroke-dashoffset 1.25s var(--ressort); filter: drop-shadow(0 0 10px color-mix(in oklab, var(--mood) 70%, transparent)); }
+#aire { transition: opacity .9s ease .35s; }
+.fil { position: absolute; top: 0; bottom: 0; width: 1px; background: linear-gradient(180deg, transparent, rgba(255, 255, 255, .35) 20%, rgba(255, 255, 255, .35) 80%, transparent); opacity: 0; transition: opacity .2s; pointer-events: none; }
+.point { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--lumiere); box-shadow: 0 0 0 2px var(--nuit), 0 0 16px 2px var(--mood); pointer-events: none; }
+.point::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 1px solid var(--mood); animation: pouls 2.6s ease-out infinite; }
+@keyframes pouls { from { transform: scale(.5); opacity: .9; } to { transform: scale(1.5); opacity: 0; } }
+.periodes { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); padding: 4px; border-radius: 999px; background: var(--verre); border: 1px solid var(--lisere); }
+.periodes button { position: relative; z-index: 1; padding: 8px 0; font-size: 13px; color: var(--texte-2); border-radius: 999px; transition: color .3s, transform .25s var(--ressort); }
+.periodes button[aria-pressed="true"] { color: var(--texte); }
+.periodes .glisse { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 4); border-radius: 999px; background: var(--verre-fort); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); transition: transform .55s var(--ressort); }
+
+.carte { border-radius: var(--r-xl); padding: 20px; background: var(--verre); border: 1px solid var(--lisere); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08); backdrop-filter: blur(28px) saturate(160%); -webkit-backdrop-filter: blur(28px) saturate(160%); display: flex; flex-direction: column; gap: 16px; }
+.carte-tete { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.vie-titre { font-family: var(--serif); font-size: 22px; line-height: 1.2; font-weight: 350; text-wrap: balance; }
+.vie-titre b { font-family: var(--sans); font-weight: 500; font-size: .86em; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.vie li { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: baseline; padding: 9px 0; font-size: 14.5px; }
+.vie li small { font-size: 13px; color: var(--texte-2); font-variant-numeric: tabular-nums; }
+.jauge { grid-column: 1 / -1; height: 5px; border-radius: 99px; background: rgba(255, 255, 255, .09); overflow: hidden; }
+.jauge i { display: block; height: 100%; width: var(--p); border-radius: 99px; background: var(--lumiere); transform-origin: left; animation: remplir 1.3s var(--ressort) .45s both; }
+.jauge.cours i { background: var(--lavande); }
+@keyframes remplir { from { transform: scaleX(0); } }
+.palier { font-size: 13.5px; color: var(--texte-2); padding-top: 14px; border-top: 1px solid var(--lisere); }
+
+.lignes { display: flex; flex-direction: column; }
+.lignes li { display: grid; grid-template-columns: minmax(0, 1fr) 62px auto; gap: 12px; align-items: center; padding: 13px 0; border-top: 1px solid rgba(255, 255, 255, .07); }
+.lignes .nom { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lignes .nom + span { display: block; margin-top: 2px; }
+.lignes svg { width: 62px; height: 26px; overflow: visible; }
+.lignes .val { text-align: right; font-size: 15px; font-variant-numeric: tabular-nums; }
+.lignes .val small { display: block; font-size: 12.5px; margin-top: 2px; }
+.haut { color: var(--hausse); } .bas { color: var(--baisse); }
+
+.dock { position: sticky; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 5; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 6px 14px 16px; pointer-events: none; }
+.dock > * { pointer-events: auto; }
+.dock .rond { width: 48px; height: 48px; background: rgba(20, 22, 32, .62); color: var(--texte); }
+.dock .rond.plus { background: var(--lumiere); color: var(--nuit); border-color: transparent; }
+.onglets { position: relative; display: flex; padding: 5px; border-radius: 999px; background: rgba(20, 22, 32, .62); border: 1px solid var(--lisere); backdrop-filter: blur(24px) saturate(170%); -webkit-backdrop-filter: blur(24px) saturate(170%); box-shadow: 0 12px 40px -8px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 255, 255, .1); }
+.onglets button { position: relative; z-index: 1; width: 48px; height: 40px; display: grid; place-items: center; color: var(--texte-3); border-radius: 999px; transition: color .3s, transform .25s var(--ressort); }
+.onglets button[aria-pressed="true"] { color: var(--texte); }
+.onglets .glisse { position: absolute; top: 5px; left: 5px; width: 48px; height: 40px; border-radius: 999px; background: var(--verre-fort); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 0 22px -4px var(--mood); transition: transform .6s var(--ressort); }
+
+/* ——— Les règles ——— */
+.regles { display: flex; flex-direction: column; gap: 64px; padding-top: 12px; }
+.regle { display: flex; flex-direction: column; gap: 22px; }
+.regle h2 { font-family: var(--serif); font-weight: 350; font-size: clamp(30px, 5vw, 40px); line-height: 1.08; letter-spacing: -.015em; text-wrap: balance; }
+.regle h2 em { color: var(--texte-2); }
+.regle > p { max-width: 36em; color: var(--texte-2); }
+
+.nuancier { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px 14px; }
+.nuancier li { display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 12px; align-items: center; }
+.nuancier i { grid-row: span 2; width: 44px; height: 44px; border-radius: 14px; border: 1px solid var(--lisere); }
+.nuancier b { font-weight: 500; font-size: 14.5px; }
+.nuancier code { font-family: var(--mono); font-size: 11.5px; color: var(--texte-3); }
+.aurores { display: grid; gap: 10px; }
+.aurores li { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 14px; align-items: center; font-size: 14.5px; }
+.aurores i { height: 34px; border-radius: 99px; filter: saturate(1.05); }
+.aurores span { color: var(--texte-2); }
+
+.secteurs { display: flex; gap: 2px; height: 16px; }
+.secteurs i { border-radius: 4px; min-width: 4px; }
+.legende { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 18px; font-size: 14px; color: var(--texte-2); }
+.legende li { display: flex; align-items: center; gap: 9px; }
+.legende i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.legende b { margin-left: auto; font-weight: 400; color: var(--texte); font-variant-numeric: tabular-nums; }
+
+.specimens { display: flex; flex-direction: column; }
+.specimens > div { display: flex; flex-direction: column; gap: 8px; padding: 22px 0; border-top: 1px solid var(--lisere); min-width: 0; }
+.sp-serif { font-family: var(--serif); font-weight: 300; font-size: clamp(34px, 6.4vw, 54px); line-height: 1.02; letter-spacing: -.02em; text-wrap: balance; }
+.sp-sans { font-weight: 500; font-size: clamp(34px, 6.4vw, 54px); line-height: 1; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.sp-sans span { display: block; }
+.sp-mono { font-family: var(--mono); font-size: 14px; letter-spacing: .04em; color: var(--texte-2); overflow-wrap: anywhere; }
+
+.principes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 26px 32px; }
+.principes li { display: flex; flex-direction: column; gap: 6px; padding-top: 16px; border-top: 1px solid var(--lisere); }
+.principes h3 { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 21px; }
+.principes p { font-size: 14.5px; color: var(--texte-2); }
+
+.globe-bloc { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 28px; align-items: center; }
+@media (max-width: 560px) { .globe-bloc { grid-template-columns: 1fr; } }
+.globe-bloc canvas { width: 100%; max-width: 260px; aspect-ratio: 1; margin-inline: auto; display: block; }
+.globe-bloc p { color: var(--texte-2); font-size: 15px; }
+.pied { padding-top: 28px; border-top: 1px solid var(--lisere); color: var(--texte-3); font-size: 14px; max-width: 40em; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="da" id="da" data-humeur="hausse">
+  <div class="lueur" aria-hidden="true"></div>
+  <main class="page">
+
+    <header class="tete">
+      <span class="mono">Atlas · Direction artistique · Proposition</span>
+      <h1>Nuit boréale</h1>
+      <p>Ton patrimoine vu comme un ciel de nuit. Le fond reste sombre et calme. Une lumière le traverse et dit, avant le moindre chiffre, comment s'est passée la journée. La maquette est vivante : change l'humeur, floute les montants, fais glisser ton doigt sur la courbe.</p>
+    </header>
+
+    <div class="reglages" aria-label="Réglages de la maquette">
+      <div class="seg" role="group" aria-label="Humeur du jour">
+        <button type="button" id="h-hausse" data-h="hausse" aria-pressed="true"><i style="background:var(--hausse)"></i>Hausse</button>
+        <button type="button" id="h-calme" data-h="calme" aria-pressed="false"><i style="background:var(--calme)"></i>Calme</button>
+        <button type="button" id="h-baisse" data-h="baisse" aria-pressed="false"><i style="background:var(--baisse)"></i>Baisse</button>
+      </div>
+      <button type="button" class="pastille" id="btn-discret" aria-pressed="false">Mode discret</button>
+      <button type="button" class="pastille" id="btn-rejouer">Rejouer l'entrée</button>
+    </div>
+
+    <section class="ecran" id="ecran" aria-label="Maquette de l'écran Aujourd'hui">
+      <div class="aurore" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="ecran-in">
+        <div class="barre arrive" style="--i:0">
+          <span class="mono">Mardi 17 novembre · 17:42</span>
+          <button type="button" class="rond" id="oeil" aria-pressed="false" aria-label="Mode discret : flouter les montants">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></svg>
+          </button>
+        </div>
+
+        <p class="phrase" id="phrase" aria-live="polite"></p>
+
+        <div class="total arrive" style="--i:2">
+          <span class="mono">Patrimoine</span>
+          <div class="chiffre amt" id="total"><span class="odo" id="odo-ent"></span><span class="odo dec" id="odo-dec"></span></div>
+          <div class="delta">
+            <span class="var"><span class="fl" id="fleche">▲</span><span class="amt" id="d-eur"></span></span>
+            <span class="var" id="d-pct"></span>
+            <span class="t3">aujourd'hui</span>
+          </div>
+        </div>
+
+        <div class="graphe arrive" style="--i:3">
+          <div class="lecture mono"><span id="lec-g"></span><span class="amt" id="lec-d"></span></div>
+          <div class="zone" id="zone">
+            <svg id="courbe" role="img" aria-label="Évolution du patrimoine sur la période choisie">
+              <defs><linearGradient id="fondu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--mood);stop-opacity:.3"/><stop offset="1" style="stop-color:var(--mood);stop-opacity:0"/></linearGradient></defs>
+              <path id="aire" fill="url(#fondu)" stroke="none"/>
+              <path id="ligne" pathLength="1"/>
+            </svg>
+            <div class="fil" id="fil"></div>
+            <div class="point" id="point"></div>
+          </div>
+          <div class="periodes" role="group" aria-label="Période">
+            <span class="glisse" id="glisse-p"></span>
+            <button type="button" id="p-1s" data-p="1S" aria-pressed="false">1S</button>
+            <button type="button" id="p-1m" data-p="1M" aria-pressed="false">1M</button>
+            <button type="button" id="p-1a" data-p="1A" aria-pressed="true">1A</button>
+            <button type="button" id="p-tout" data-p="Tout" aria-pressed="false">Tout</button>
+          </div>
+        </div>
+
+        <article class="carte arrive" style="--i:4">
+          <div class="carte-tete"><span class="mono">Morceaux de vie</span><span class="mono">5 % / an attendu</span></div>
+          <p class="vie-titre">Tes placements paient déjà <b class="amt">768 €</b> de ta vie chaque mois.</p>
+          <ul class="vie">
+            <li><span>Abonnements</span><small><span class="amt">64 €</span> · couvert</small><div class="jauge" style="--p:100%"><i></i></div></li>
+            <li><span>Courses</span><small><span class="amt">420 €</span> · couvert</small><div class="jauge" style="--p:100%"><i></i></div></li>
+            <li><span>Loyer</span><small><span class="amt">950 €</span> · 30 %</small><div class="jauge cours" style="--p:30%"><i></i></div></li>
+          </ul>
+          <p class="palier">Prochain palier : ton loyer en entier, à <span class="amt">344 000 €</span>.</p>
+        </article>
+
+        <section class="arrive" style="--i:5" aria-label="Positions">
+          <div class="carte-tete" style="padding-bottom:10px"><span class="mono">ETF · 3 lignes</span><span class="mono">Aujourd'hui</span></div>
+          <ul class="lignes">
+            <li><div><div class="nom">iShares Core MSCI World</div><span class="mono">IWDA · Amsterdam</span></div><svg data-spark="11" data-sens="1"></svg><div class="val"><span class="amt">62 410 €</span><small class="haut">▲ +0,21 %</small></div></li>
+            <li><div><div class="nom">Vanguard FTSE All-World</div><span class="mono">VWCE · Xetra</span></div><svg data-spark="23" data-sens="1"></svg><div class="val"><span class="amt">41 870 €</span><small class="haut">▲ +0,18 %</small></div></li>
+            <li><div><div class="nom">iShares Core MSCI EM IMI</div><span class="mono">EMIM · Amsterdam</span></div><svg data-spark="37" data-sens="-1"></svg><div class="val"><span class="amt">12 240 €</span><small class="bas">▼ −0,34 %</small></div></li>
+          </ul>
+        </section>
+      </div>
+
+      <nav class="dock" aria-label="Navigation">
+        <button type="button" class="rond" id="nav-chat" aria-label="Demande à ton patrimoine"><svg class="ico" viewBox="0 0 24 24"><path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v6a2.5 2.5 0 0 1-2.5 2.5H11l-4 3.5V15a2.5 2.5 0 0 1-2-2.5v-6z"/></svg></button>
+        <button type="button" class="rond plus" id="nav-plus" aria-label="Ajouter une position"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+        <div class="onglets" role="group" aria-label="Pages">
+          <span class="glisse" id="glisse-n"></span>
+          <button type="button" id="n-0" data-n="0" aria-pressed="true" aria-label="Aujourd'hui"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="11" r="3.2"/><path d="M4 18.5h16M12 3.6v1.5M5.7 6.7l1 1M18.3 6.7l-1 1M3.6 12.4h1.5M18.9 12.4h1.5"/></svg></button>
+          <button type="button" id="n-1" data-n="1" aria-pressed="false" aria-label="Ce que tu possèdes"><svg class="ico" viewBox="0 0 24 24"><path d="M12 4l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/></svg></button>
+          <button type="button" id="n-2" data-n="2" aria-pressed="false" aria-label="Et si"><svg class="ico" viewBox="0 0 24 24"><path d="M4 18h4c5 0 4-10 9-10h3"/><path d="M10 18h10" opacity=".5"/><path d="M17.5 5.5L20 8l-2.5 2.5"/></svg></button>
+        </div>
+      </nav>
+    </section>
+
+    <div class="regles">
+
+      <section class="regle">
+        <span class="mono">Couleur</span>
+        <h2>Le fond ne change jamais. <em>Seule la lumière change.</em></h2>
+        <p>Un noir légèrement bleuté plutôt qu'un noir pur, pour que le verre dépoli ait quelque chose à flouter. Les actions sont en blanc, jamais en vert ni en rouge : ces deux teintes ne servent qu'à dire hausse ou baisse.</p>
+        <ul class="nuancier">
+          <li><i style="background:var(--nuit)"></i><b>Nuit</b><code>#06070B · fond</code></li>
+          <li><i style="background:var(--encre)"></i><b>Encre</b><code>#0C0E15 · surfaces</code></li>
+          <li><i style="background:var(--verre-fort)"></i><b>Verre</b><code>blanc 6–10 % + flou</code></li>
+          <li><i style="background:var(--texte)"></i><b>Craie</b><code>#F3F4F8 · texte</code></li>
+          <li><i style="background:var(--texte-2)"></i><b>Brume</b><code>#A9AEBF · secondaire</code></li>
+          <li><i style="background:var(--lumiere)"></i><b>Lumière</b><code>#FFFFFF · actions</code></li>
+          <li><i style="background:var(--lavande)"></i><b>Lavande</b><code>#B4B8FF · focus, en cours</code></li>
+          <li><i style="background:var(--hausse)"></i><b>Menthe</b><code>#4DE5B2 · hausse</code></li>
+          <li><i style="background:var(--baisse)"></i><b>Braise</b><code>#FF7A6B · baisse</code></li>
+        </ul>
+        <ul class="aurores">
+          <li><i style="background:linear-gradient(90deg,var(--h1),var(--h2),var(--h3))"></i><span><b style="color:var(--texte);font-weight:500">Aurore de hausse.</b> Émeraude, cyan, une pointe de violet.</span></li>
+          <li><i style="background:linear-gradient(90deg,var(--c1),var(--c2),var(--c3))"></i><span><b style="color:var(--texte);font-weight:500">Aurore calme.</b> Indigo et violet : une journée sans histoire.</span></li>
+          <li><i style="background:linear-gradient(90deg,var(--b1),var(--b2),var(--b3))"></i><span><b style="color:var(--texte);font-weight:500">Aurore de baisse.</b> Une braise chaude, pas une sirène d'alarme.</span></li>
+        </ul>
+        <p>La teinte glisse en continu avec la variation du jour, de −2 % à +2 %. Pour les répartitions (secteurs, pays, devises), huit teintes dans un ordre fixe, vérifiées pour rester distinctes en cas de daltonisme :</p>
+        <div class="secteurs" role="img" aria-label="Exemple de répartition par secteur">
+          <i style="flex:27;background:var(--s1)"></i><i style="flex:16;background:var(--s2)"></i><i style="flex:12;background:var(--s3)"></i><i style="flex:11;background:var(--s4)"></i><i style="flex:10;background:var(--s5)"></i><i style="flex:8;background:var(--s6)"></i><i style="flex:5;background:var(--s7)"></i><i style="flex:11;background:var(--s8)"></i>
+        </div>
+        <ul class="legende">
+          <li><i style="background:var(--s1)"></i>Technologie<b>27 %</b></li>
+          <li><i style="background:var(--s2)"></i>Finance<b>16 %</b></li>
+          <li><i style="background:var(--s3)"></i>Santé<b>12 %</b></li>
+          <li><i style="background:var(--s4)"></i>Industrie<b>11 %</b></li>
+          <li><i style="background:var(--s5)"></i>Consommation<b>10 %</b></li>
+          <li><i style="background:var(--s6)"></i>Communication<b>8 %</b></li>
+          <li><i style="background:var(--s7)"></i>Énergie<b>5 %</b></li>
+          <li><i style="background:var(--s8)"></i>Autres<b>11 %</b></li>
+        </ul>
+      </section>
+
+      <section class="regle">
+        <span class="mono">Typographie</span>
+        <h2>Deux voix. <em>L'app te parle, les chiffres répondent.</em></h2>
+        <p>Tout ce que l'app te dit avec des mots est en serif, comme le titre d'un journal du matin. Tout ce qui se compte est en grotesque à chiffres de largeur fixe : les montants ne dansent pas quand ils changent. Les repères techniques (ISIN, dates, places) sont en mono, petits et discrets.</p>
+        <div class="specimens">
+          <div><span class="mono">La voix · Newsreader</span><span class="sp-serif">Qu'est-ce que je possède <i>vraiment</i> ?</span></div>
+          <div><span class="mono">Les chiffres · Geist, tabulaires</span><span class="sp-sans"><span>184 320,45 €</span><span class="t3">181 111,07 €</span></span></div>
+          <div><span class="mono">Les repères · Geist Mono</span><span class="sp-mono">IE00B4L5Y983 · EURONEXT AMSTERDAM · 17:35 CET</span></div>
+        </div>
+      </section>
+
+      <section class="regle">
+        <span class="mono">Mouvement</span>
+        <h2>Tout bouge avec une raison.</h2>
+        <ul class="principes">
+          <li><h3>Rien n'apparaît, tout arrive</h3><p>Chaque bloc entre en ressort, avec un léger flou qui se dissipe, 70 ms après le précédent. La phrase du jour s'écrit mot à mot.</p></li>
+          <li><h3>Les chiffres roulent</h3><p>Chaque chiffre défile sur sa propre colonne. Largeur fixe, aucun saut de mise en page, même quand le total change.</p></li>
+          <li><h3>Les courbes se dessinent</h3><p>Le trait se trace en 1,2 s, l'aire monte ensuite. Le doigt fait glisser un repère et la valeur suit.</p></li>
+          <li><h3>Un seul ciel pour trois pages</h3><p>L'aurore est continue. Changer de page fait glisser le contenu et déplace la lumière, sans coupure.</p></li>
+          <li><h3>Le toucher répond</h3><p>Chaque bouton s'enfonce à 96 % et revient en ressort. Vibration légère sur Android ; l'iPhone ne l'autorise pas aux apps web, le retour y reste visuel.</p></li>
+          <li><h3>Le calme d'abord</h3><p>L'aurore dérive sur 30 secondes. Les chargements sont des silhouettes lumineuses, jamais des roues qui tournent. Le réglage « réduire les animations » du téléphone est respecté.</p></li>
+        </ul>
+      </section>
+
+      <section class="regle">
+        <span class="mono">Le globe</span>
+        <h2>Où travaille ton argent.</h2>
+        <div class="globe-bloc">
+          <canvas id="globe" width="520" height="520" aria-label="Globe : les places boursières ouvertes sont allumées"></canvas>
+          <div>
+            <p>Un globe en points, léger (5 ko), qui tourne lentement. Les places boursières ouvertes s'allument comme des villes la nuit ; les fermées restent en veilleuse. Ici, simulation d'un mardi à 15&nbsp;h&nbsp;40&nbsp;: l'Europe et New York sont ouvertes, l'Asie dort.</p>
+            <p id="globe-note" hidden style="margin-top:12px;color:var(--texte-3)">Le globe ne peut pas se charger dans cet aperçu. Il sera intégré à l'app.</p>
+          </div>
+        </div>
+      </section>
+
+      <p class="pied">Proposition à valider. Les montants de la maquette sont fictifs. Rien n'est codé dans l'interface de l'app tant que tu n'as pas donné ton accord, et chaque point se discute : teintes, typographies, intensité des animations.</p>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const da = $('#da'), ecran = $('#ecran');
+  const reduit = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const NB = ' ', FIN = ' ';
+  const euro = (v, d = 0) => new Intl.NumberFormat('fr-BE', { minimumFractionDigits: d, maximumFractionDigits: d }).format(v).replace(/\s/g, FIN);
+  const signe = v => (v > 0 ? '+' : v < 0 ? '−' : '');
+
+  const HUMEURS = {
+    hausse: { total: 184320.45, jour: 212.40, pct: 0.12,
+      phrase: `[[+212${NB}€]] aujourd'hui. Merci __Nvidia__, que tu détiens via 3${NB}ETF. Le dollar t'en a repris {{40}}.` },
+    calme: { total: 184111.15, jour: 3.10, pct: 0.00,
+      phrase: `Journée calme${NB}: [[+3${NB}€]]. Tes 1${FIN}612 entreprises ont travaillé, les marchés ont haussé les épaules.` },
+    baisse: { total: 182960.05, jour: -1148.00, pct: -0.62,
+      phrase: `[[−1${FIN}148${NB}€]] aujourd'hui. La __tech__ __américaine__ a reculé, et elle pèse un quart de ce que tu possèdes. Le dollar a amorti {{90${NB}€}}.` }
+  };
+  const PERIODES = {
+    '1S': { n: 36, jours: 7, amp: .55, lib: 'sur 7 jours', graine: 7, perf: { hausse: .009, calme: .003, baisse: -.012 } },
+    '1M': { n: 48, jours: 30, amp: .42, lib: 'sur 1 mois', graine: 19, perf: { hausse: .024, calme: .019, baisse: .011 } },
+    '1A': { n: 90, jours: 365, amp: .26, lib: 'sur 1 an', graine: 5, perf: { hausse: .112, calme: .111, baisse: .104 } },
+    'Tout': { n: 120, jours: 2190, amp: .13, lib: 'depuis mars 2020', graine: 42, perf: { hausse: .61, calme: .608, baisse: .598 } }
+  };
+  let humeur = 'hausse', periode = '1A', pts = [];
+
+  function alea(g) { return () => { g |= 0; g = g + 0x6D2B79F5 | 0; let t = Math.imul(g ^ g >>> 15, 1 | g); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function marche(graine, n, amp) {
+    const r = alea(graine), c = [0];
+    for (let i = 1; i < n; i++) c.push(c[i - 1] + r() - .5);
+    const fin = c[n - 1];
+    return c.map((v, i) => i / (n - 1) + (v - fin * i / (n - 1)) * amp);
+  }
+
+  /* Chiffres qui roulent */
+  function rouler(el, str, deZero) {
+    if (deZero || el.dataset.len !== String(str.length)) {
+      el.textContent = '';
+      [...str].forEach((ch, i) => {
+        const s = document.createElement('span');
+        if (/\d/.test(ch)) {
+          s.className = 'od-d';
+          const col = document.createElement('span');
+          col.className = 'od-col';
+          col.style.transitionDelay = (i * 40) + 'ms';
+          for (let d = 0; d < 10; d++) { const c = document.createElement('span'); c.textContent = d; col.appendChild(c); }
+          s.appendChild(col);
+        } else { s.className = 'od-s'; s.textContent = ch; }
+        el.appendChild(s);
+      });
+      el.dataset.len = str.length;
+      el.getBoundingClientRect();
+    }
+    [...str].forEach((ch, i) => { if (/\d/.test(ch)) el.children[i].firstChild.style.transform = `translateY(${-ch * 10}%)`; });
+  }
+
+  function ecrirePhrase(src) {
+    const p = $('#phrase'); p.textContent = '';
+    src.split(' ').forEach((mot, i) => {
+      const m = mot.match(/^(\[\[|\{\{|__)(.+?)(\]\]|\}\}|__)(.*)$/);
+      const s = document.createElement('span');
+      s.className = 'mot'; s.style.setProperty('--i', i);
+      if (m) {
+        const in_ = document.createElement('span');
+        in_.className = m[1] === '[[' ? 'cle amt' : m[1] === '{{' ? 'amt' : 'nom';
+        in_.textContent = m[2];
+        s.append(in_, m[4]);
+      } else s.textContent = mot;
+      p.append(s, ' ');
+    });
+  }
+
+  function chiffres(deZero) {
+    const h = HUMEURS[humeur];
+    const [ent, dec] = euro(h.total, 2).split(',');
+    rouler($('#odo-ent'), ent, deZero);
+    rouler($('#odo-dec'), ',' + dec + NB + '€', deZero);
+    $('#total').setAttribute('aria-label', euro(h.total, 2) + ' €');
+    $('#fleche').textContent = h.jour < 0 ? '▼' : '▲';
+    $('#d-eur').textContent = signe(h.jour) + euro(Math.abs(h.jour), 2) + NB + '€';
+    $('#d-pct').textContent = signe(h.pct) + euro(Math.abs(h.pct), 2) + NB + '%';
+  }
+
+  /* Courbe */
+  const zone = $('#zone'), svg = $('#courbe'), ligne = $('#ligne'), aire = $('#aire'), fil = $('#fil'), point = $('#point');
+  function tracer(anime) {
+    const W = zone.clientWidth, H = zone.clientHeight, cfg = PERIODES[periode];
+    if (!W) return;
+    const fin = HUMEURS[humeur].total, debut = fin / (1 + cfg.perf[humeur]);
+    const vals = marche(cfg.graine, cfg.n, cfg.amp).map(x => debut + (fin - debut) * x);
+    const min = Math.min(...vals), max = Math.max(...vals), m = 16, L = W - 7;
+    pts = vals.map((v, i) => ({ x: i / (cfg.n - 1) * L, y: H - m - (v - min) / ((max - min) || 1) * (H - 2 * m), v, i }));
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    ligne.setAttribute('d', d);
+    aire.setAttribute('d', `${d}L${L} ${H}L0 ${H}Z`);
+    if (anime && !reduit) {
+      ligne.style.transition = aire.style.transition = 'none';
+      ligne.style.strokeDashoffset = 1; aire.style.opacity = 0;
+      ligne.getBoundingClientRect();
+      ligne.style.transition = aire.style.transition = '';
+      ligne.style.strokeDashoffset = 0; aire.style.opacity = 1;
+    }
+    poser(pts.length - 1, false);
+  }
+  function poser(i, actif) {
+    const p = pts[i], cfg = PERIODES[periode]; if (!p) return;
+    point.style.left = p.x + 'px'; point.style.top = p.y + 'px';
+    fil.style.left = p.x + 'px'; fil.style.opacity = actif ? 1 : 0;
+    if (actif) {
+      const date = new Date(Date.UTC(2026, 10, 17) - (cfg.n - 1 - i) / (cfg.n - 1) * cfg.jours * 864e5);
+      $('#lec-g').textContent = new Intl.DateTimeFormat('fr-BE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(date);
+      $('#lec-d').textContent = euro(p.v) + NB + '€';
+    } else {
+      const perf = cfg.perf[humeur] * 100;
+      $('#lec-g').textContent = signe(perf) + euro(Math.abs(perf), 1) + NB + '% ' + cfg.lib;
+      $('#lec-d').textContent = '';
+    }
+  }
+  function suivre(e) {
+    const r = zone.getBoundingClientRect(), n = pts.length;
+    const i = Math.max(0, Math.min(n - 1, Math.round((e.clientX - r.left) / (r.width - 7) * (n - 1))));
+    poser(i, true);
+  }
+  zone.addEventListener('pointermove', suivre);
+  zone.addEventListener('pointerdown', suivre);
+  zone.addEventListener('pointerleave', () => poser(pts.length - 1, false));
+  zone.addEventListener('pointercancel', () => poser(pts.length - 1, false));
+
+  /* Mini-courbes des lignes */
+  $$('[data-spark]').forEach(s => {
+    const w = marche(+s.dataset.spark, 22, .5), sens = +s.dataset.sens;
+    const v = w.map(x => sens > 0 ? x : 1 - x), min = Math.min(...v), max = Math.max(...v);
+    const xy = v.map((y, i) => [i / 21 * 58 + 1, 23 - (y - min) / (max - min) * 20]);
+    const coul = sens > 0 ? 'var(--hausse)' : 'var(--baisse)';
+    s.setAttribute('viewBox', '0 0 62 26');
+    s.innerHTML = `<polyline points="${xy.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ')}" fill="none" stroke="var(--texte-2)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${xy[21][0]}" cy="${xy[21][1].toFixed(1)}" r="2.6" fill="${coul}" stroke="var(--nuit)" stroke-width="1.5"/>`;
+  });
+
+  /* Réglages */
+  function changerHumeur(h) {
+    humeur = h; da.dataset.humeur = h;
+    $$('[data-h]').forEach(b => b.setAttribute('aria-pressed', b.dataset.h === h));
+    ecrirePhrase(HUMEURS[h].phrase); chiffres(false); tracer(true);
+  }
+  $$('[data-h]').forEach(b => b.addEventListener('click', () => changerHumeur(b.dataset.h)));
+
+  function changerPeriode(p) {
+    periode = p;
+    $$('[data-p]').forEach((b, i) => { const on = b.dataset.p === p; b.setAttribute('aria-pressed', on); if (on) $('#glisse-p').style.transform = `translateX(${i * 100}%)`; });
+    tracer(true);
+  }
+  $$('[data-p]').forEach(b => b.addEventListener('click', () => changerPeriode(b.dataset.p)));
+
+  $$('[data-n]').forEach(b => b.addEventListener('click', () => {
+    $$('[data-n]').forEach(x => x.setAttribute('aria-pressed', x === b));
+    $('#glisse-n').style.transform = `translateX(${b.dataset.n * 100}%)`;
+    if (navigator.vibrate) navigator.vibrate(8);
+  }));
+
+  function discret(on) {
+    da.classList.toggle('discret', on);
+    $('#oeil').setAttribute('aria-pressed', on); $('#btn-discret').setAttribute('aria-pressed', on);
+  }
+  $('#oeil').addEventListener('click', () => discret(!da.classList.contains('discret')));
+  $('#btn-discret').addEventListener('click', () => discret(!da.classList.contains('discret')));
+
+  function entrer() {
+    $$('.arrive', ecran).forEach(el => { el.style.animation = 'none'; el.getBoundingClientRect(); el.style.animation = ''; });
+    $$('.jauge i', ecran).forEach(el => { el.style.animation = 'none'; el.getBoundingClientRect(); el.style.animation = ''; });
+    ecrirePhrase(HUMEURS[humeur].phrase); chiffres(true); tracer(true);
+  }
+  $('#btn-rejouer').addEventListener('click', entrer);
+
+  $('#glisse-p').style.transform = 'translateX(200%)';
+  ecrirePhrase(HUMEURS[humeur].phrase); chiffres(true); tracer(true);
+  let larg = zone.clientWidth;
+  new ResizeObserver(() => { if (zone.clientWidth !== larg) { larg = zone.clientWidth; tracer(false); } }).observe(zone);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => tracer(false));
+
+  /* Globe : places ouvertes allumées (simulation mardi 15 h 40, heure de Bruxelles) */
+  (async () => {
+    const c = $('#globe');
+    try {
+      const { default: creerGlobe } = await import('https://cdn.jsdelivr.net/npm/cobe@0.6.3/+esm');
+      const places = [[50.85, 4.35, 1], [52.37, 4.9, 1], [48.86, 2.35, 1], [51.51, -.13, 1], [50.11, 8.68, 1], [45.46, 9.19, 1], [47.37, 8.54, 1], [40.71, -74, 1], [43.65, -79.38, 1],
+        [35.68, 139.69, 0], [22.32, 114.17, 0], [31.23, 121.47, 0], [19.08, 72.88, 0], [-33.87, 151.21, 0], [1.35, 103.82, 0], [-23.55, -46.63, 1]];
+      let phi = 4.6;
+      creerGlobe(c, {
+        devicePixelRatio: 2, width: 520, height: 520, phi, theta: .3, dark: 1, diffuse: 1.15,
+        mapSamples: 15000, mapBrightness: 5.2, baseColor: [.3, .32, .46], markerColor: [1, .9, .66], glowColor: [.16, .18, .32],
+        markers: places.map(p => ({ location: [p[0], p[1]], size: p[2] ? .085 : .028 })),
+        onRender: s => { s.phi = phi; if (!reduit) phi += .0032; }
+      });
+    } catch (e) { c.hidden = true; $('#globe-note').hidden = false; }
+  })();
+})();
+</script>
