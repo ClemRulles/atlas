@@ -44,14 +44,14 @@ export function getStartDateForTimeframe(
   }
 }
 
-// Repli sans historique synthétique : uniquement valeur actuelle connue (pas de courbe inventée)
-function buildManualQuoteWithoutHistory(
+function buildBaselineHistory(
   holding: PortfolioHolding,
+  startDate: Date,
   refDate: Date,
   forcedSource: 'yahoo' | 'manual' = 'manual',
   overridePriceEur?: number
 ): MarketQuoteResult {
-  const priceEur =
+  const endPrice =
     overridePriceEur && overridePriceEur > 0
       ? overridePriceEur
       : holding.manualCurrentPriceEur && holding.manualCurrentPriceEur > 0
@@ -60,15 +60,26 @@ function buildManualQuoteWithoutHistory(
       ? holding.buyPriceEur
       : 0;
 
+  const startPrice = holding.buyPriceEur > 0 ? holding.buyPriceEur : endPrice;
+  const endStr = refDate.toISOString().slice(0, 10);
+  const startStr = startDate.toISOString().slice(0, 10);
+
+  const history: { date: string; priceEur: number }[] = [];
+  if (startPrice > 0 || endPrice > 0) {
+    if (startStr < endStr && startPrice > 0) {
+      history.push({ date: startStr, priceEur: Number(startPrice.toFixed(4)) });
+    }
+    if (endPrice > 0) {
+      history.push({ date: endStr, priceEur: Number(endPrice.toFixed(4)) });
+    }
+  }
+
   return {
     symbol: holding.symbol || holding.name,
     currency: holding.currency || 'EUR',
-    priceEur,
-    previousCloseEur: priceEur,
-    history:
-      priceEur > 0
-        ? [{ date: refDate.toISOString().slice(0, 10), priceEur }]
-        : [],
+    priceEur: endPrice,
+    previousCloseEur: startPrice || endPrice,
+    history,
     source: forcedSource,
   };
 }
@@ -113,12 +124,19 @@ export async function fetchQuotesForHoldings(
     }
   }
 
+  const fallbackDateStr = refDate.toISOString().slice(0, 10);
+  const earliestBuy =
+    holdings.length > 0
+      ? holdings.reduce((min, h) => (h.buyDate < min ? h.buyDate : min), holdings[0].buyDate)
+      : fallbackDateStr;
+  const startDate = getStartDateForTimeframe(timeframe, earliestBuy, refDate);
+
   const result: Record<string, MarketQuoteResult> = {};
   const updatedLiveStatus = { ...knownLiveStatus };
 
   for (const h of holdings) {
     if (h.category === 'Cash') {
-      result[h.id] = buildManualQuoteWithoutHistory(h, refDate, 'manual');
+      result[h.id] = buildBaselineHistory(h, startDate, refDate, 'manual');
       continue;
     }
 
@@ -127,23 +145,26 @@ export async function fetchQuotesForHoldings(
     const prevKnown = updatedLiveStatus[h.id];
 
     if (live && live.priceEur > 0) {
-      const hasRealHistory = Array.isArray(live.history) && live.history.length >= 2;
-      updatedLiveStatus[h.id] = { isLive: hasRealHistory, lastPriceEur: live.priceEur };
+      updatedLiveStatus[h.id] = { isLive: true, lastPriceEur: live.priceEur };
+      const hasHistory = Array.isArray(live.history) && live.history.length >= 2;
       result[h.id] = {
         ...live,
         currency: (h.currency || live.currency || 'EUR') as AssetCurrency,
-        history: hasRealHistory ? live.history : [],
-        source: hasRealHistory ? 'yahoo' : 'manual',
+        history: hasHistory
+          ? live.history
+          : buildBaselineHistory(h, startDate, refDate, 'yahoo', live.priceEur).history,
+        source: 'yahoo',
       };
     } else if (prevKnown?.isLive && prevKnown.lastPriceEur) {
-      result[h.id] = buildManualQuoteWithoutHistory(
+      result[h.id] = buildBaselineHistory(
         h,
+        startDate,
         refDate,
         'yahoo',
         prevKnown.lastPriceEur
       );
     } else {
-      result[h.id] = buildManualQuoteWithoutHistory(h, refDate, 'manual');
+      result[h.id] = buildBaselineHistory(h, startDate, refDate, 'manual');
     }
   }
 
@@ -165,7 +186,7 @@ export function enrichHoldings(
   const startDate = getStartDateForTimeframe(timeframe, earliestBuy, refDate);
 
   return holdings.map((h) => {
-    const q = quotes[h.id] || buildManualQuoteWithoutHistory(h, refDate, 'manual');
+    const q = quotes[h.id] || buildBaselineHistory(h, startDate, refDate, 'manual');
     const currency: AssetCurrency = h.currency || q.currency || 'EUR';
     const currentPriceEur = q.priceEur;
     const currentValueEur = currentPriceEur * h.quantity;
@@ -173,7 +194,7 @@ export function enrichHoldings(
     const pnlEur = currentValueEur - costBasisEur;
     const pnlPercent = costBasisEur > 0 ? (pnlEur / costBasisEur) * 100 : 0;
 
-    const rawHistory = q.source === 'yahoo' && Array.isArray(q.history) ? q.history : [];
+    const rawHistory = Array.isArray(q.history) ? q.history : [];
     const filteredHistory = rawHistory.filter((pt) => new Date(pt.date) >= startDate);
     const activeHistory = filteredHistory.length >= 2 ? filteredHistory : rawHistory;
 
@@ -183,6 +204,17 @@ export function enrichHoldings(
             date: pt.date,
             valueEur: Number((pt.priceEur * h.quantity).toFixed(2)),
           }))
+        : activeHistory.length === 1
+        ? [
+            {
+              date: startDate.toISOString().slice(0, 10),
+              valueEur: Number((h.buyPriceEur * h.quantity).toFixed(2)),
+            },
+            {
+              date: activeHistory[0].date,
+              valueEur: Number((activeHistory[0].priceEur * h.quantity).toFixed(2)),
+            },
+          ]
         : [];
 
     const basePoint = history.length >= 2 ? history[0].valueEur : currentValueEur;
@@ -201,15 +233,14 @@ export function enrichHoldings(
       periodChangeEur,
       periodChangePercent,
       history,
-      liveSource: history.length >= 2 && q.source === 'yahoo' ? 'yahoo' : 'manual',
+      liveSource: q.source === 'yahoo' ? 'yahoo' : 'manual',
     };
   });
 }
 
-// Construit la courbe uniquement à partir de la somme des données historiques réelles disponibles
 export function buildPortfolioSeries(enriched: EnrichedHolding[]) {
   const holdingsWithHistory = enriched.filter(
-    (item) => item.liveSource === 'yahoo' && Array.isArray(item.history) && item.history.length >= 2
+    (item) => Array.isArray(item.history) && item.history.length >= 2
   );
 
   if (holdingsWithHistory.length === 0) {
@@ -228,7 +259,6 @@ export function buildPortfolioSeries(enriched: EnrichedHolding[]) {
     return [];
   }
 
-  // Grille commune basée uniquement sur les dates historiques existantes
   const lastKnownByHolding = new Map<string, number>();
 
   return sortedDates.map((date) => {
