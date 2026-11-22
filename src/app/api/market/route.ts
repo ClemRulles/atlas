@@ -1,133 +1,130 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { TimeframeKey } from '@/types/portfolio';
+import yahooFinance from 'yahoo-finance2';
 
-function getPeriod1(tf: TimeframeKey): string {
-  const now = new Date();
-  const d = new Date(now);
-  switch (tf) {
-    case '1J':
-      d.setDate(now.getDate() - 3);
-      break;
-    case '1S':
-      d.setDate(now.getDate() - 10);
-      break;
-    case '1M':
-      d.setMonth(now.getMonth() - 1);
-      break;
-    case 'YTD':
-      return `${now.getFullYear()}-01-01`;
-    case 'LTM':
-      d.setFullYear(now.getFullYear() - 1);
-      break;
-    case 'Tout':
-    default:
-      d.setFullYear(now.getFullYear() - 10);
-      break;
-  }
-  return d.toISOString().slice(0, 10);
+interface YahooQuoteShape {
+  regularMarketPrice?: number;
+  regularMarketPreviousClose?: number;
+  currency?: string;
+}
+
+interface YahooChartPoint {
+  close?: number | null;
+  date?: Date | string | null;
+}
+
+interface YahooChartShape {
+  quotes?: YahooChartPoint[];
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const symbols: string[] = Array.isArray(body?.symbols) ? body.symbols : [];
-    const timeframe: TimeframeKey = body?.timeframe || 'Tout';
+    const timeframe: string = body?.timeframe || '1M';
 
     if (symbols.length === 0) {
       return NextResponse.json({ quotes: {} });
     }
 
-    // Chargement dynamique de yahoo-finance2 pour compatibilité v2/v3
-    const yfModule = await import('yahoo-finance2');
-    const YahooFinanceConstructor =
-      (yfModule as unknown as { default?: unknown }).default || yfModule;
-    const yf =
-      typeof YahooFinanceConstructor === 'function'
-        ? new (YahooFinanceConstructor as new () => Record<string, unknown>)()
-        : (YahooFinanceConstructor as Record<string, unknown>);
-
-    // Taux USD -> EUR
-    let usdToEur = 0.92;
+    let eurUsdRate = 1.08;
     try {
-      const fxQuote = await (
-        yf.quote as (sym: string) => Promise<{ regularMarketPrice?: number }>
-      )('EURUSD=X');
-      if (fxQuote?.regularMarketPrice && fxQuote.regularMarketPrice > 0) {
-        usdToEur = 1 / fxQuote.regularMarketPrice;
+      const fx = (await yahooFinance.quote('EURUSD=X')) as YahooQuoteShape | null;
+      if (fx && typeof fx.regularMarketPrice === 'number' && fx.regularMarketPrice > 0) {
+        eurUsdRate = fx.regularMarketPrice;
       }
     } catch {
-      // Garde le taux de repli
+      // Taux par défaut
     }
 
-    const period1 = getPeriod1(timeframe);
-    const interval = timeframe === '1J' ? '15m' : timeframe === '1S' ? '1h' : '1d';
+    const now = new Date();
+    const period1 = new Date(now);
+    switch (timeframe) {
+      case '1J':
+        period1.setDate(now.getDate() - 5);
+        break;
+      case '1S':
+        period1.setDate(now.getDate() - 10);
+        break;
+      case '1M':
+        period1.setMonth(now.getMonth() - 1);
+        break;
+      case 'YTD':
+        period1.setFullYear(now.getFullYear(), 0, 1);
+        break;
+      case 'LTM':
+        period1.setFullYear(now.getFullYear() - 1);
+        break;
+      case '2A':
+        period1.setFullYear(now.getFullYear() - 2);
+        break;
+      case '5A':
+        period1.setFullYear(now.getFullYear() - 5);
+        break;
+      case '10A':
+        period1.setFullYear(now.getFullYear() - 10);
+        break;
+      case 'Tout':
+      default:
+        period1.setFullYear(now.getFullYear() - 25);
+        break;
+    }
+
+    const interval = ['2A', '5A', '10A', 'Tout'].includes(timeframe) ? '1wk' : '1d';
     const quotes: Record<string, unknown> = {};
 
     await Promise.all(
       symbols.map(async (rawSym) => {
-        const sym = rawSym.trim();
+        const sym = rawSym.trim().toUpperCase();
         if (!sym) return;
         try {
-          const quoteData = await (
-            yf.quote as (sym: string) => Promise<{
-              regularMarketPrice?: number;
-              regularMarketPreviousClose?: number;
-              currency?: string;
-            }>
-          )(sym);
+          const quote = (await yahooFinance.quote(sym)) as YahooQuoteShape | null;
+          if (!quote || typeof quote.regularMarketPrice !== 'number') return;
 
-          const rawPrice = quoteData?.regularMarketPrice;
-          if (!rawPrice || rawPrice <= 0) return;
+          const currency = (quote.currency || 'EUR').toUpperCase();
+          const toEur = (val: number) => (currency === 'USD' ? val / eurUsdRate : val);
 
-          const currency = (quoteData?.currency || 'USD').toUpperCase();
-          const fx = currency === 'EUR' ? 1 : currency === 'USD' ? usdToEur : usdToEur;
-          const priceEur = Number((rawPrice * fx).toFixed(2));
-          const prevCloseEur = Number(
-            ((quoteData?.regularMarketPreviousClose || rawPrice) * fx).toFixed(2)
-          );
+          const priceEur = Number(toEur(quote.regularMarketPrice).toFixed(4));
+          const prevCloseRaw = quote.regularMarketPreviousClose ?? quote.regularMarketPrice;
+          const previousCloseEur = Number(toEur(prevCloseRaw).toFixed(4));
 
           let history: { date: string; priceEur: number }[] = [];
           try {
-            const chartData = await (
-              yf.chart as (
-                sym: string,
-                opts: { period1: string; interval: string }
-              ) => Promise<{ quotes?: { date: Date | string; close?: number | null }[] }>
-            )(sym, { period1, interval });
-
-            history = (chartData?.quotes || [])
-              .filter((pt) => typeof pt.close === 'number' && pt.close > 0)
-              .map((pt) => ({
-                date: new Date(pt.date).toISOString().slice(0, 10),
-                priceEur: Number(((pt.close as number) * fx).toFixed(2)),
-              }));
+            const chart = (await yahooFinance.chart(sym, {
+              period1,
+              period2: now,
+              interval,
+            })) as YahooChartShape | null;
+            if (chart?.quotes?.length) {
+              history = chart.quotes
+                .filter((q: YahooChartPoint) => typeof q.close === 'number' && Boolean(q.date))
+                .map((q: YahooChartPoint) => ({
+                  date: new Date(q.date as Date | string).toISOString().slice(0, 10),
+                  priceEur: Number(toEur(q.close as number).toFixed(4)),
+                }));
+            }
           } catch {
-            history = [];
+            // Historique optionnel
           }
 
           if (history.length === 0) {
-            const today = new Date().toISOString().slice(0, 10);
-            history = [{ date: today, priceEur }];
+            history = [{ date: now.toISOString().slice(0, 10), priceEur }];
           }
 
-          quotes[sym.toUpperCase()] = {
-            symbol: sym.toUpperCase(),
+          quotes[sym] = {
+            symbol: sym,
             priceEur,
-            previousCloseEur: prevCloseEur,
+            previousCloseEur,
             history,
             source: 'yahoo',
           };
         } catch {
-          // Ignoré : le client utilisera le repli manuel
+          // Symbole introuvable
         }
       })
     );
 
     return NextResponse.json({ quotes });
-  } catch (err) {
-    return NextResponse.json(
-      { quotes: {}, error: err instanceof Error ? err.message : 'Erreur marché' },
-      { status: 200 }
-    );
+  } catch {
+    return NextResponse.json({ quotes: {} }, { status: 200 });
   }
 }

@@ -2,8 +2,10 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Activity,
+  ArrowDownRight,
+  ArrowUpRight,
   Bot,
+  LayoutDashboard,
   Lock,
   Newspaper,
   Pencil,
@@ -11,73 +13,72 @@ import {
   Plus,
   RefreshCw,
   Send,
-  TrendingDown,
-  TrendingUp,
+  Settings,
+  Sparkles,
 } from 'lucide-react';
 import LockScreen from '@/components/LockScreen';
-import InteractiveChart from '@/components/InteractiveChart';
+import InteractiveChart, { RangeSelection } from '@/components/InteractiveChart';
 import DonutAllocation from '@/components/DonutAllocation';
 import HoldingFormModal from '@/components/HoldingFormModal';
+import SettingsModal from '@/components/SettingsModal';
 import { INITIAL_HOLDINGS } from '@/data/initialPortfolio';
 import {
   buildPortfolioSeries,
   enrichHoldings,
   fetchQuotesForHoldings,
 } from '@/lib/marketClient';
-import {
-  AssetCategory,
-  MarketQuoteResult,
-  PortfolioHolding,
-  TimeframeKey,
-} from '@/types/portfolio';
+import { MarketQuoteResult, PortfolioHolding, TimeframeKey } from '@/types/portfolio';
 
-const PORTFOLIO_STORAGE_KEY = 'wealthview_holdings_v1';
-const TIMEFRAMES: TimeframeKey[] = ['1J', '1S', '1M', 'YTD', 'LTM', 'Tout'];
+const HOLDINGS_STORAGE_KEY = 'wealthview_holdings_v1';
+const TIMEFRAMES: TimeframeKey[] = ['1J', '1S', '1M', 'YTD', 'LTM', '2A', '5A', '10A', 'Tout'];
 
-type TabKey = 'synthesis' | 'portfolio' | 'news' | 'advisor';
+type TabKey = 'synthese' | 'portefeuille' | 'actus' | 'conseiller';
 
-export default function WealthViewPage() {
+interface NewsItem {
+  title: string;
+  impact: 'Positif' | 'Neutre' | 'Vigilance';
+  asset: string;
+  summary: string;
+  time: string;
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export default function WealthAppPage() {
   const [unlocked, setUnlocked] = useState<boolean>(false);
-  const [clientNow, setClientNow] = useState<Date>(() => new Date("2026-11-22T00:00:00Z"));
-
-  useEffect(() => {
-    setClientNow(new Date());
-  }, []);
-  const [activeTab, setActiveTab] = useState<TabKey>('synthesis');
-  const [timeframe, setTimeframe] = useState<TimeframeKey>('Tout');
+  const [clientNow, setClientNow] = useState<Date>(() => new Date('2026-11-22T00:00:00Z'));
+  const [activeTab, setActiveTab] = useState<TabKey>('synthese');
+  const [timeframe, setTimeframe] = useState<TimeframeKey>('LTM');
   const [holdings, setHoldings] = useState<PortfolioHolding[]>(INITIAL_HOLDINGS);
   const [quotes, setQuotes] = useState<Record<string, MarketQuoteResult>>({});
   const [loadingQuotes, setLoadingQuotes] = useState<boolean>(false);
-  const [hoveredPoint, setHoveredPoint] = useState<{ date: string; valueEur: number } | null>(
-    null
-  );
+  const [hoverPoint, setHoverPoint] = useState<{ date: string; valueEur: number } | null>(null);
+  const [rangeSelection, setRangeSelection] = useState<RangeSelection | null>(null);
 
-  // Édition / Ajout
   const [modalOpen, setModalOpen] = useState<boolean>(false);
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [editingHolding, setEditingHolding] = useState<PortfolioHolding | null>(null);
 
-  // Page 3 : Actus IA
-  const [newsText, setNewsText] = useState<string>('');
-  const [newsError, setNewsError] = useState<string>('');
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [loadingNews, setLoadingNews] = useState<boolean>(false);
 
-  // Page 4 : Conseiller IA
-  const [chatInput, setChatInput] = useState<string>('');
-  const [chatMessages, setChatMessages] = useState<
-    { role: 'user' | 'assistant'; content: string }[]
-  >([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
       content:
-        'Bonjour ! J’ai accès à la répartition de votre portefeuille. Posez-moi vos questions sur votre diversification, vos positions ou une future allocation.',
+        'Bonjour ! Je suis votre conseiller financier IA. Posez-moi une question sur votre répartition, vos plus-values ou votre stratégie d’investissement.',
     },
   ]);
-  const [advisorError, setAdvisorError] = useState<string>('');
-  const [loadingAdvisor, setLoadingAdvisor] = useState<boolean>(false);
+  const [chatInput, setChatInput] = useState<string>('');
+  const [sendingChat, setSendingChat] = useState<boolean>(false);
 
   useEffect(() => {
+    setClientNow(new Date());
     try {
-      const saved = localStorage.getItem(PORTFOLIO_STORAGE_KEY);
+      const saved = localStorage.getItem(HOLDINGS_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -85,29 +86,27 @@ export default function WealthViewPage() {
         }
       }
     } catch {
-      // Garde les positions initiales
+      // Ignore storage error
     }
   }, []);
 
-  useEffect(() => {
+  const persistHoldings = (next: PortfolioHolding[]) => {
+    setHoldings(next);
     try {
-      localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(holdings));
+      localStorage.setItem(HOLDINGS_STORAGE_KEY, JSON.stringify(next));
     } catch {
-      // Ignoré
+      // Ignore storage error
     }
-  }, [holdings]);
+  };
 
   const refreshQuotes = useCallback(
     async (items: PortfolioHolding[], tf: TimeframeKey) => {
       setLoadingQuotes(true);
-      try {
-        const q = await fetchQuotesForHoldings(items, tf, clientNow);
-        setQuotes(q);
-      } finally {
-        setLoadingQuotes(false);
-      }
+      const q = await fetchQuotesForHoldings(items, tf, clientNow);
+      setQuotes(q);
+      setLoadingQuotes(false);
     },
-    []
+    [clientNow]
   );
 
   useEffect(() => {
@@ -124,109 +123,104 @@ export default function WealthViewPage() {
   const series = useMemo(() => buildPortfolioSeries(enriched), [enriched]);
 
   const totalValueEur = useMemo(
-    () => enriched.reduce((sum, item) => sum + item.currentValueEur, 0),
+    () => enriched.reduce((sum, h) => sum + h.currentValueEur, 0),
     [enriched]
   );
 
-  const displayedValueEur = hoveredPoint ? hoveredPoint.valueEur : totalValueEur;
+  const totalCostEur = useMemo(
+    () => enriched.reduce((sum, h) => sum + h.costBasisEur, 0),
+    [enriched]
+  );
 
-  const periodStartValueEur = series.length > 0 ? series[0].valueEur : totalValueEur;
-  const periodDeltaEur = displayedValueEur - periodStartValueEur;
-  const periodDeltaPct =
-    periodStartValueEur > 0 ? (periodDeltaEur / periodStartValueEur) * 100 : 0;
+  const totalPnlEur = totalValueEur - totalCostEur;
+  const totalPnlPct = totalCostEur > 0 ? (totalPnlEur / totalCostEur) * 100 : 0;
 
-  const groupedByCategory = useMemo(() => {
-    const map = new Map<AssetCategory, typeof enriched>();
-    for (const item of enriched) {
-      const list = map.get(item.category) || [];
-      list.push(item);
-      map.set(item.category, list);
-    }
-    return Array.from(map.entries());
-  }, [enriched]);
+  const periodDeltaEur = useMemo(() => {
+    if (series.length < 2) return 0;
+    return series[series.length - 1].valueEur - series[0].valueEur;
+  }, [series]);
+
+  const periodDeltaPct = useMemo(() => {
+    if (series.length < 2 || series[0].valueEur <= 0) return 0;
+    return (periodDeltaEur / series[0].valueEur) * 100;
+  }, [series, periodDeltaEur]);
 
   const categorySlices = useMemo(() => {
-    return groupedByCategory.map(([label, items]) => ({
-      label,
-      valueEur: items.reduce((s, x) => s + x.currentValueEur, 0),
-    }));
-  }, [groupedByCategory]);
-
-  const institutionBreakdown = useMemo(() => {
     const map = new Map<string, number>();
-    for (const item of enriched) {
-      map.set(item.institution, (map.get(item.institution) || 0) + item.currentValueEur);
+    for (const h of enriched) {
+      map.set(h.category, (map.get(h.category) || 0) + h.currentValueEur);
+    }
+    return Array.from(map.entries())
+      .map(([label, valueEur]) => ({ label, valueEur }))
+      .sort((a, b) => b.valueEur - a.valueEur);
+  }, [enriched]);
+
+  const institutionGroups = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const h of enriched) {
+      map.set(h.institution, (map.get(h.institution) || 0) + h.currentValueEur);
     }
     return Array.from(map.entries())
       .map(([institution, valueEur]) => ({ institution, valueEur }))
       .sort((a, b) => b.valueEur - a.valueEur);
   }, [enriched]);
 
-  const topAndFlop = useMemo(() => {
-    if (enriched.length === 0) return { best: null, worst: null };
-    const sorted = [...enriched].sort((a, b) => b.pnlPercent - a.pnlPercent);
-    return { best: sorted[0], worst: sorted[sorted.length - 1] };
-  }, [enriched]);
-
-  const portfolioSummaryText = useMemo(() => {
-    const lines = enriched.map(
-      (h) =>
-        `- ${h.name} (${h.category}${h.symbol ? `, ${h.symbol}` : ''}) sur ${
-          h.institution
-        } : valeur actuelle ${h.currentValueEur.toFixed(2)} €, PnL ${
-          h.pnlEur >= 0 ? '+' : ''
-        }${h.pnlEur.toFixed(2)} € (${h.pnlPercent.toFixed(1)}%), acheté le ${h.buyDate}`
-    );
-    return `Valeur totale : ${totalValueEur.toFixed(2)} €\nPositions :\n${lines.join('\n')}`;
-  }, [enriched, totalValueEur]);
-
   const handleSaveHolding = (item: PortfolioHolding) => {
-    setHoldings((prev) => {
-      const exists = prev.some((p) => p.id === item.id);
-      if (exists) {
-        return prev.map((p) => (p.id === item.id ? item : p));
-      }
-      return [...prev, item];
-    });
+    const exists = holdings.some((h) => h.id === item.id);
+    const next = exists
+      ? holdings.map((h) => (h.id === item.id ? item : h))
+      : [...holdings, item];
+    persistHoldings(next);
   };
 
   const handleDeleteHolding = (id: string) => {
-    setHoldings((prev) => prev.filter((p) => p.id !== id));
+    const next = holdings.filter((h) => h.id !== id);
+    persistHoldings(next);
   };
 
-  const generateNewsDigest = async () => {
+  const loadAiNews = useCallback(async () => {
     setLoadingNews(true);
-    setNewsError('');
     try {
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'news',
-          portfolioSummary: portfolioSummaryText,
+          portfolio: enriched.map((h) => ({
+            name: h.name,
+            symbol: h.symbol,
+            category: h.category,
+            valueEur: Math.round(h.currentValueEur),
+            pnlPct: Number(h.pnlPercent.toFixed(1)),
+          })),
         }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) {
-        setNewsError(data.error || "Erreur lors de la génération de l'actualité.");
-      } else {
-        setNewsText(data.text || '');
+      if (Array.isArray(data.news)) {
+        setNewsItems(data.news);
       }
     } catch {
-      setNewsError('Impossible de joindre le service IA.');
+      // Fallback silencieux
     } finally {
       setLoadingNews(false);
     }
-  };
+  }, [enriched]);
 
-  const sendAdvisorPrompt = async () => {
-    const trimmed = chatInput.trim();
-    if (!trimmed || loadingAdvisor) return;
+  useEffect(() => {
+    if (unlocked && activeTab === 'actus' && newsItems.length === 0) {
+      loadAiNews();
+    }
+  }, [unlocked, activeTab, newsItems.length, loadAiNews]);
 
+  const handleSendChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = chatInput.trim();
+    if (!text || sendingChat) return;
+
+    const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
+    setMessages(nextMessages);
     setChatInput('');
-    setAdvisorError('');
-    setChatMessages((prev) => [...prev, { role: 'user', content: trimmed }]);
-    setLoadingAdvisor(true);
+    setSendingChat(true);
 
     try {
       const res = await fetch('/api/ai', {
@@ -234,23 +228,35 @@ export default function WealthViewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'advisor',
-          portfolioSummary: portfolioSummaryText,
-          prompt: trimmed,
+          messages: nextMessages,
+          portfolio: enriched.map((h) => ({
+            name: h.name,
+            symbol: h.symbol,
+            category: h.category,
+            institution: h.institution,
+            valueEur: Math.round(h.currentValueEur),
+            pnlPct: Number(h.pnlPercent.toFixed(1)),
+          })),
         }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) {
-        setAdvisorError(data.error || "Erreur de l'agent IA.");
-      } else {
-        setChatMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: data.text || '' },
-        ]);
-      }
+      setMessages([
+        ...nextMessages,
+        {
+          role: 'assistant',
+          content: data.reply || 'Analyse terminée. Souhaitez-vous approfondir un actif ?',
+        },
+      ]);
     } catch {
-      setAdvisorError('Impossible de joindre le conseiller IA.');
+      setMessages([
+        ...nextMessages,
+        {
+          role: 'assistant',
+          content: 'Impossible de joindre le conseiller IA pour le moment.',
+        },
+      ]);
     } finally {
-      setLoadingAdvisor(false);
+      setSendingChat(false);
     }
   };
 
@@ -258,101 +264,126 @@ export default function WealthViewPage() {
     return <LockScreen onUnlock={() => setUnlocked(true)} />;
   }
 
+  const displayedValue = rangeSelection
+    ? rangeSelection.end.valueEur
+    : hoverPoint
+    ? hoverPoint.valueEur
+    : totalValueEur;
+
+  const activeDeltaEur = rangeSelection ? rangeSelection.diffEur : periodDeltaEur;
+  const activeDeltaPct = rangeSelection ? rangeSelection.diffPercent : periodDeltaPct;
+  const isDeltaPositive = activeDeltaEur >= 0;
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-white pb-28">
-      {/* Barre supérieure iOS */}
-      <header className="sticky top-0 z-30 backdrop-blur-xl bg-slate-50/85 dark:bg-[#090C12]/85 border-b border-slate-200/70 dark:border-slate-800/80 px-4 py-3 flex items-center justify-between">
-        <div>
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-            WealthView
-          </span>
-          <h1 className="text-base font-bold leading-tight">
-            {activeTab === 'synthesis' && 'Synthèse'}
-            {activeTab === 'portfolio' && 'Portefeuille & Stats'}
-            {activeTab === 'news' && 'Actus IA'}
-            {activeTab === 'advisor' && 'Conseiller IA'}
-          </h1>
-        </div>
+    <div
+      style={{
+        paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))',
+      }}
+      className="min-h-screen bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-white"
+    >
+      {/* En-tête fixe compatible Safe Area iPhone */}
+      <header
+        style={{
+          paddingTop: 'max(0.85rem, env(safe-area-inset-top))',
+        }}
+        className="sticky top-0 z-30 bg-slate-50/90 dark:bg-[#090C12]/90 backdrop-blur-md border-b border-slate-200/70 dark:border-slate-800/80 px-4 pb-3"
+      >
+        <div className="max-w-xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Paramètres et code PIN"
+              className="p-2 rounded-xl bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300 active:scale-95 transition"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+            <div>
+              <h1 className="text-base font-bold tracking-tight">WealthView</h1>
+              <p className="text-[11px] text-slate-400">Patrimoine consolidé • EUR</p>
+            </div>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => refreshQuotes(holdings, timeframe)}
-            className="p-2 rounded-full bg-white dark:bg-[#131823] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 active:scale-95 transition"
-            aria-label="Actualiser les cours"
-          >
-            <RefreshCw className={`w-4 h-4 ${loadingQuotes ? 'animate-spin' : ''}`} />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setEditingHolding(null);
-              setModalOpen(true);
-            }}
-            className="px-3 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1 active:scale-95 transition"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Ajouter</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setUnlocked(false)}
-            className="p-2 rounded-full bg-white dark:bg-[#131823] border border-slate-200 dark:border-slate-800 text-slate-500 active:scale-95 transition"
-            aria-label="Verrouiller"
-          >
-            <Lock className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => refreshQuotes(holdings, timeframe)}
+              aria-label="Actualiser les cours"
+              className="p-2 rounded-xl bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300"
+            >
+              <RefreshCw className={`w-4 h-4 ${loadingQuotes ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setUnlocked(false)}
+              aria-label="Verrouiller"
+              className="p-2 rounded-xl bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300"
+            >
+              <Lock className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Contenu principal */}
-      <main className="max-w-2xl mx-auto px-4 pt-4 space-y-5">
-        {/* ONGLET 1 : SYNTHÈSE */}
-        {activeTab === 'synthesis' && (
+      <main className="max-w-xl mx-auto px-4 pt-4 space-y-5">
+        {activeTab === 'synthese' && (
           <>
-            <section className="rounded-3xl bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80 p-4 shadow-xs">
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                {hoveredPoint ? `Valeur au ${hoveredPoint.date}` : 'Valeur totale du portefeuille'}
-              </p>
-              <div className="text-3xl font-extrabold tracking-tight mt-1">
-                {displayedValueEur.toLocaleString('fr-FR', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}{' '}
-                €
-              </div>
-
-              <div
-                className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${
-                  periodDeltaEur >= 0
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-rose-600 dark:text-rose-400'
-                }`}
-              >
-                {periodDeltaEur >= 0 ? (
-                  <TrendingUp className="w-3.5 h-3.5" />
-                ) : (
-                  <TrendingDown className="w-3.5 h-3.5" />
-                )}
-                <span>
-                  {periodDeltaEur >= 0 ? '+' : ''}
-                  {periodDeltaEur.toLocaleString('fr-FR', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{' '}
-                  € ({periodDeltaPct >= 0 ? '+' : ''}
-                  {periodDeltaPct.toFixed(2)} %) · {timeframe}
+            <section className="rounded-3xl bg-white dark:bg-[#131823] p-5 border border-slate-200/70 dark:border-slate-800/80 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-400">
+                  {rangeSelection
+                    ? `${rangeSelection.start.date} → ${rangeSelection.end.date}`
+                    : hoverPoint
+                    ? `Valeur au ${hoverPoint.date}`
+                    : 'Valeur totale du portefeuille'}
+                </span>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-950/10 dark:bg-sky-500/15 text-blue-900 dark:text-sky-400 font-semibold">
+                  {holdings.length} actifs
                 </span>
               </div>
 
-              <div className="mt-3">
-                <InteractiveChart data={series} onHoverPoint={setHoveredPoint} />
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-3xl font-extrabold tracking-tight">
+                  {displayedValue.toLocaleString('fr-FR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{' '}
+                  €
+                </span>
               </div>
 
-              {/* Sélecteur de période : 1J, 1S, 1M, YTD, LTM, Tout */}
-              <div className="grid grid-cols-6 gap-1.5 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+              <div className="mt-1.5 flex items-center gap-2 text-xs font-semibold">
+                <span
+                  className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg ${
+                    isDeltaPositive
+                      ? 'bg-emerald-500/10 text-emerald-500'
+                      : 'bg-rose-500/10 text-rose-500'
+                  }`}
+                >
+                  {isDeltaPositive ? (
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  ) : (
+                    <ArrowDownRight className="w-3.5 h-3.5" />
+                  )}
+                  {isDeltaPositive ? '+' : ''}
+                  {activeDeltaEur.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} € (
+                  {isDeltaPositive ? '+' : ''}
+                  {activeDeltaPct.toFixed(2)}%)
+                </span>
+                <span className="text-slate-400 font-normal">
+                  {rangeSelection ? 'entre 2 doigts' : `sur ${timeframe}`}
+                </span>
+              </div>
+
+              <div className="mt-4">
+                <InteractiveChart
+                  data={series}
+                  onHoverPoint={setHoverPoint}
+                  onRangeSelect={setRangeSelection}
+                />
+              </div>
+
+              <div className="mt-3 flex items-center justify-between gap-1 bg-slate-100 dark:bg-[#0D111A] p-1 rounded-2xl overflow-x-auto">
                 {TIMEFRAMES.map((tf) => {
                   const active = timeframe === tf;
                   return (
@@ -360,10 +391,10 @@ export default function WealthViewPage() {
                       key={tf}
                       type="button"
                       onClick={() => setTimeframe(tf)}
-                      className={`py-1.5 rounded-lg text-xs font-bold transition ${
+                      className={`flex-1 min-w-[34px] py-1.5 rounded-xl text-[11px] font-bold transition ${
                         active
-                          ? 'bg-blue-600 text-white'
-                          : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          ? 'bg-white dark:bg-[#1E2638] text-blue-900 dark:text-white shadow-xs'
+                          : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
                       {tf}
@@ -373,76 +404,81 @@ export default function WealthViewPage() {
               </div>
             </section>
 
-            {/* Liste par catégorie avec perf en € et % sur la période choisie */}
-            <section className="space-y-4">
-              {groupedByCategory.map(([category, items]) => {
-                const catVal = items.reduce((s, i) => s + i.currentValueEur, 0);
-                const catDeltaEur = items.reduce((s, i) => s + i.periodChangeEur, 0);
-                const catBase = catVal - catDeltaEur;
-                const catDeltaPct = catBase > 0 ? (catDeltaEur / catBase) * 100 : 0;
+            <section className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-white dark:bg-[#131823] p-4 border border-slate-200/70 dark:border-slate-800/80">
+                <span className="text-xs text-slate-400">Capital investi</span>
+                <p className="text-lg font-bold mt-1">
+                  {totalCostEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €
+                </p>
+              </div>
+              <div className="rounded-2xl bg-white dark:bg-[#131823] p-4 border border-slate-200/70 dark:border-slate-800/80">
+                <span className="text-xs text-slate-400">Plus-value latente</span>
+                <p
+                  className={`text-lg font-bold mt-1 ${
+                    totalPnlEur >= 0 ? 'text-emerald-500' : 'text-rose-500'
+                  }`}
+                >
+                  {totalPnlEur >= 0 ? '+' : ''}
+                  {totalPnlEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} € (
+                  {totalPnlPct >= 0 ? '+' : ''}
+                  {totalPnlPct.toFixed(1)}%)
+                </p>
+              </div>
+            </section>
 
+            <section className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold">Mes positions</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingHolding(null);
+                    setModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-800 dark:text-sky-400"
+                >
+                  <Plus className="w-4 h-4" /> Ajouter
+                </button>
+              </div>
+
+              {enriched.map((item) => {
+                const pos = item.pnlEur >= 0;
                 return (
                   <div
-                    key={category}
-                    className="rounded-2xl bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80 overflow-hidden"
+                    key={item.id}
+                    className="rounded-2xl bg-white dark:bg-[#131823] p-3.5 border border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between"
                   >
-                    <div className="px-4 py-3 bg-slate-50/70 dark:bg-[#0E131C] border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                        {category}
-                      </span>
-                      <div className="text-right">
-                        <span className="text-xs font-bold">
-                          {catVal.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €
-                        </span>
-                        <span
-                          className={`ml-2 text-xs font-semibold ${
-                            catDeltaEur >= 0
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-rose-600 dark:text-rose-400'
-                          }`}
-                        >
-                          ({catDeltaEur >= 0 ? '+' : ''}
-                          {catDeltaPct.toFixed(2)}%)
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold">{item.name}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold">
+                          {item.institution}
                         </span>
                       </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {item.category} • {item.quantity} ×{' '}
+                        {item.currentPriceEur.toLocaleString('fr-FR', {
+                          maximumFractionDigits: 2,
+                        })}{' '}
+                        €
+                      </p>
                     </div>
 
-                    <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {items.map((item) => (
-                        <div
-                          key={item.id}
-                          className="px-4 py-3 flex items-center justify-between"
-                        >
-                          <div>
-                            <div className="text-sm font-semibold">{item.name}</div>
-                            <div className="text-[11px] text-slate-400">
-                              {item.symbol ? `${item.symbol} · ` : ''}
-                              {item.institution}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm font-bold">
-                              {item.currentValueEur.toLocaleString('fr-FR', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}{' '}
-                              €
-                            </div>
-                            <div
-                              className={`text-xs font-semibold ${
-                                item.periodChangeEur >= 0
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : 'text-rose-600 dark:text-rose-400'
-                              }`}
-                            >
-                              {item.periodChangeEur >= 0 ? '+' : ''}
-                              {item.periodChangeEur.toFixed(2)} € (
-                              {item.periodChangePercent >= 0 ? '+' : ''}
-                              {item.periodChangePercent.toFixed(2)}%)
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="text-right">
+                      <p className="text-sm font-bold">
+                        {item.currentValueEur.toLocaleString('fr-FR', {
+                          maximumFractionDigits: 2,
+                        })}{' '}
+                        €
+                      </p>
+                      <p
+                        className={`text-xs font-semibold ${
+                          pos ? 'text-emerald-500' : 'text-rose-500'
+                        }`}
+                      >
+                        {pos ? '+' : ''}
+                        {item.pnlPercent.toFixed(1)}%
+                      </p>
                     </div>
                   </div>
                 );
@@ -451,118 +487,80 @@ export default function WealthViewPage() {
           </>
         )}
 
-        {/* ONGLET 2 : PORTEFEUILLE & STATS */}
-        {activeTab === 'portfolio' && (
+        {activeTab === 'portefeuille' && (
           <>
-            <section className="rounded-3xl bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80 p-4">
-              <h2 className="text-sm font-bold mb-3">Répartition par catégorie</h2>
+            <section className="rounded-3xl bg-white dark:bg-[#131823] p-5 border border-slate-200/70 dark:border-slate-800/80">
+              <h2 className="text-sm font-bold mb-4">Répartition par classe d’actifs</h2>
               <DonutAllocation slices={categorySlices} />
             </section>
 
-            {/* Statistiques complémentaires : Établissements + Top/Flop */}
-            <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80 p-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5">
-                  Par véhicule / banque
-                </h3>
-                <div className="space-y-2">
-                  {institutionBreakdown.map((b) => {
-                    const pct = totalValueEur > 0 ? (b.valueEur / totalValueEur) * 100 : 0;
-                    return (
-                      <div key={b.institution} className="flex items-center justify-between text-xs">
-                        <span className="font-semibold">{b.institution}</span>
-                        <span className="text-slate-500 dark:text-slate-400">
-                          {b.valueEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} € (
-                          {pct.toFixed(0)}%)
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80 p-4 flex flex-col justify-between space-y-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Meilleure / Moins bonne ligne
-                </h3>
-                {topAndFlop.best && (
-                  <div className="text-xs">
-                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                      Top : {topAndFlop.best.name} (
-                      {topAndFlop.best.pnlPercent >= 0 ? '+' : ''}
-                      {topAndFlop.best.pnlPercent.toFixed(1)}%)
-                    </span>
+            <section className="rounded-3xl bg-white dark:bg-[#131823] p-5 border border-slate-200/70 dark:border-slate-800/80 space-y-3">
+              <h2 className="text-sm font-bold">Répartition par établissement</h2>
+              {institutionGroups.map((g) => {
+                const pct = totalValueEur > 0 ? (g.valueEur / totalValueEur) * 100 : 0;
+                return (
+                  <div key={g.institution} className="space-y-1">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span>{g.institution}</span>
+                      <span>
+                        {g.valueEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} € (
+                        {pct.toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className="h-full bg-[#1E3A8A] dark:bg-sky-500 rounded-full"
+                        style={{ width: `${Math.min(100, pct)}%` }}
+                      />
+                    </div>
                   </div>
-                )}
-                {topAndFlop.worst && (
-                  <div className="text-xs">
-                    <span className="text-rose-600 dark:text-rose-400 font-bold">
-                      À surveiller : {topAndFlop.worst.name} (
-                      {topAndFlop.worst.pnlPercent >= 0 ? '+' : ''}
-                      {topAndFlop.worst.pnlPercent.toFixed(1)}%)
-                    </span>
-                  </div>
-                )}
-              </div>
+                );
+              })}
             </section>
 
-            {/* Liste détaillée modifiable avec bouton crayon */}
-            <section className="space-y-4">
-              {groupedByCategory.map(([category, items]) => (
-                <div
-                  key={category}
-                  className="rounded-2xl bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80 overflow-hidden"
+            <section className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold">Gérer mes investissements</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingHolding(null);
+                    setModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0A1628] text-white border border-blue-500/30 text-xs font-semibold"
                 >
-                  <div className="px-4 py-2.5 bg-slate-50/70 dark:bg-[#0E131C] border-b border-slate-100 dark:border-slate-800/80 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    {category}
+                  <Plus className="w-3.5 h-3.5" /> Nouvel actif
+                </button>
+              </div>
+
+              {enriched.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-2xl bg-white dark:bg-[#131823] p-3.5 border border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-bold">{item.name}</p>
+                    <p className="text-xs text-slate-400">
+                      {item.category} • {item.institution} • PRU{' '}
+                      {item.buyPriceEur.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €
+                    </p>
                   </div>
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                    {items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="px-4 py-3 flex items-center justify-between gap-3"
-                      >
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold truncate">{item.name}</div>
-                          <div className="text-[11px] text-slate-400">
-                            {item.symbol ? `Code : ${item.symbol} · ` : ''}
-                            Achat : {item.buyPriceEur.toFixed(2)} € le {item.buyDate} ·{' '}
-                            {item.institution}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <div className="text-right">
-                            <div className="text-sm font-bold">
-                              {item.currentValueEur.toLocaleString('fr-FR', {
-                                maximumFractionDigits: 2,
-                              })}{' '}
-                              €
-                            </div>
-                            <div
-                              className={`text-[11px] font-semibold ${
-                                item.pnlEur >= 0
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : 'text-rose-600 dark:text-rose-400'
-                              }`}
-                            >
-                              {item.pnlEur >= 0 ? '+' : ''}
-                              {item.pnlEur.toFixed(0)} € ({item.pnlPercent.toFixed(1)}%)
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingHolding(item);
-                              setModalOpen(true);
-                            }}
-                            aria-label="Modifier la ligne"
-                            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-blue-600 hover:text-white transition"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold">
+                      {item.currentValueEur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingHolding(item);
+                        setModalOpen(true);
+                      }}
+                      className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                      aria-label="Modifier"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -570,123 +568,127 @@ export default function WealthViewPage() {
           </>
         )}
 
-        {/* ONGLET 3 : ACTUS IA */}
-        {activeTab === 'news' && (
-          <section className="rounded-3xl bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80 p-4 space-y-4">
-            <div className="flex items-center justify-between gap-2">
+        {activeTab === 'actus' && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-bold">Newsletter personnalisée</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Synthèse IA des actualités impactant vos positions actuelles.
+                <h2 className="text-base font-bold">Actualités sur mesure</h2>
+                <p className="text-xs text-slate-400">
+                  Filtrées selon vos positions actuelles
                 </p>
               </div>
               <button
                 type="button"
-                onClick={generateNewsDigest}
+                onClick={loadAiNews}
                 disabled={loadingNews}
-                className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold transition"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0A1628] text-white border border-blue-500/30 text-xs font-semibold disabled:opacity-50"
               >
-                {loadingNews ? 'Analyse...' : 'Générer'}
+                <Sparkles className="w-3.5 h-3.5" />
+                {loadingNews ? 'Analyse...' : 'Actualiser'}
               </button>
             </div>
 
-            {newsError && (
-              <div className="rounded-2xl p-3.5 bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs leading-relaxed">
-                {newsError}
-              </div>
-            )}
-
-            {newsText ? (
-              <div className="whitespace-pre-line text-sm leading-relaxed text-slate-700 dark:text-slate-200">
-                {newsText}
+            {newsItems.length === 0 && !loadingNews ? (
+              <div className="rounded-2xl bg-white dark:bg-[#131823] p-6 text-center text-xs text-slate-400 border border-slate-200/70 dark:border-slate-800/80">
+                Cliquez sur Actualiser pour générer votre briefing IA personnalisé.
               </div>
             ) : (
-              !newsError && (
-                <p className="text-xs text-slate-400 py-6 text-center">
-                  Appuyez sur « Générer » pour produire votre revue d’actualités ciblée.
-                </p>
-              )
+              newsItems.map((n, idx) => (
+                <article
+                  key={idx}
+                  className="rounded-2xl bg-white dark:bg-[#131823] p-4 border border-slate-200/70 dark:border-slate-800/80 space-y-1.5"
+                >
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-blue-800 dark:text-sky-400">{n.asset}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full font-semibold ${
+                        n.impact === 'Positif'
+                          ? 'bg-emerald-500/10 text-emerald-500'
+                          : n.impact === 'Vigilance'
+                          ? 'bg-amber-500/10 text-amber-500'
+                          : 'bg-slate-500/10 text-slate-400'
+                      }`}
+                    >
+                      {n.impact}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold leading-snug">{n.title}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    {n.summary}
+                  </p>
+                </article>
+              ))
             )}
           </section>
         )}
 
-        {/* ONGLET 4 : CONSEILLER IA */}
-        {activeTab === 'advisor' && (
-          <section className="rounded-3xl bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80 p-4 flex flex-col space-y-3">
-            <div className="space-y-2.5 max-h-[55vh] overflow-y-auto pr-1">
-              {chatMessages.map((m, i) => (
+        {activeTab === 'conseiller' && (
+          <section className="flex flex-col h-[calc(100vh-12rem)]">
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {messages.map((m, idx) => (
                 <div
-                  key={i}
-                  className={`rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-line leading-relaxed ${
-                    m.role === 'user'
-                      ? 'bg-blue-600 text-white ml-8'
-                      : 'bg-slate-100 dark:bg-[#0D111A] text-slate-800 dark:text-slate-200 mr-6'
-                  }`}
+                  key={idx}
+                  className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  {m.content}
+                  <div
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
+                      m.role === 'user'
+                        ? 'bg-[#0A1628] text-white border border-blue-500/30'
+                        : 'bg-white dark:bg-[#131823] border border-slate-200/70 dark:border-slate-800/80'
+                    }`}
+                  >
+                    {m.content}
+                  </div>
                 </div>
               ))}
-              {loadingAdvisor && (
-                <div className="text-xs text-slate-400 px-2">Réflexion de l’agent IA...</div>
-              )}
-              {advisorError && (
-                <div className="rounded-2xl p-3 bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs">
-                  {advisorError}
-                </div>
+              {sendingChat && (
+                <div className="text-xs text-slate-400 italic">Le conseiller analyse votre portefeuille...</div>
               )}
             </div>
 
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <form onSubmit={handleSendChat} className="mt-3 flex items-center gap-2">
               <input
                 type="text"
-                placeholder="Posez une question sur votre stratégie ou budget..."
+                placeholder="Ex. Suis-je trop exposé à la tech US ?"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') sendAdvisorPrompt();
-                }}
-                className="flex-1 rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-[#0D111A] border border-slate-200 dark:border-slate-800 outline-none focus:border-blue-500"
+                className="flex-1 rounded-2xl px-4 py-3 text-xs bg-white dark:bg-[#131823] border border-slate-200/80 dark:border-slate-800 outline-none focus:border-blue-600"
               />
               <button
-                type="button"
-                onClick={sendAdvisorPrompt}
-                disabled={loadingAdvisor}
+                type="submit"
+                disabled={sendingChat}
+                className="p-3 rounded-2xl bg-[#0A1628] text-white border border-blue-500/30 disabled:opacity-50"
                 aria-label="Envoyer"
-                className="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white transition"
               >
                 <Send className="w-4 h-4" />
               </button>
-            </div>
+            </form>
           </section>
         )}
       </main>
 
-      {/* Barre de navigation fixe tout en bas (style app iOS) */}
+      {/* Barre de navigation basse */}
       <nav
-        aria-label="Navigation principale"
-        className="fixed bottom-0 inset-x-0 z-40 backdrop-blur-xl bg-white/90 dark:bg-[#0D111A]/90 border-t border-slate-200/80 dark:border-slate-800/80 pb-[env(safe-area-inset-bottom)]"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+        className="fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-[#0D111A]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 pt-2"
       >
-        <div className="max-w-2xl mx-auto grid grid-cols-4 h-16">
+        <div className="max-w-xl mx-auto grid grid-cols-4 gap-1">
           <button
             type="button"
-            onClick={() => setActiveTab('synthesis')}
-            className={`flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition ${
-              activeTab === 'synthesis'
-                ? 'text-blue-600 dark:text-blue-400'
-                : 'text-slate-400'
+            onClick={() => setActiveTab('synthese')}
+            className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
+              activeTab === 'synthese' ? 'text-blue-900 dark:text-sky-400' : 'text-slate-400'
             }`}
           >
-            <Activity className="w-5 h-5" />
+            <LayoutDashboard className="w-5 h-5" />
             <span>Synthèse</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('portfolio')}
-            className={`flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition ${
-              activeTab === 'portfolio'
-                ? 'text-blue-600 dark:text-blue-400'
-                : 'text-slate-400'
+            onClick={() => setActiveTab('portefeuille')}
+            className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
+              activeTab === 'portefeuille' ? 'text-blue-900 dark:text-sky-400' : 'text-slate-400'
             }`}
           >
             <PieChart className="w-5 h-5" />
@@ -695,11 +697,9 @@ export default function WealthViewPage() {
 
           <button
             type="button"
-            onClick={() => setActiveTab('news')}
-            className={`flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition ${
-              activeTab === 'news'
-                ? 'text-blue-600 dark:text-blue-400'
-                : 'text-slate-400'
+            onClick={() => setActiveTab('actus')}
+            className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
+              activeTab === 'actus' ? 'text-blue-900 dark:text-sky-400' : 'text-slate-400'
             }`}
           >
             <Newspaper className="w-5 h-5" />
@@ -708,11 +708,9 @@ export default function WealthViewPage() {
 
           <button
             type="button"
-            onClick={() => setActiveTab('advisor')}
-            className={`flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition ${
-              activeTab === 'advisor'
-                ? 'text-blue-600 dark:text-blue-400'
-                : 'text-slate-400'
+            onClick={() => setActiveTab('conseiller')}
+            className={`flex flex-col items-center py-1.5 text-[11px] font-semibold ${
+              activeTab === 'conseiller' ? 'text-blue-900 dark:text-sky-400' : 'text-slate-400'
             }`}
           >
             <Bot className="w-5 h-5" />
@@ -730,6 +728,11 @@ export default function WealthViewPage() {
         }}
         onSave={handleSaveHolding}
         onDelete={handleDeleteHolding}
+      />
+
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
     </div>
   );

@@ -27,11 +27,20 @@ function getStartDateForTimeframe(
     case 'LTM':
       d.setFullYear(now.getFullYear() - 1);
       return d;
+    case '2A':
+      d.setFullYear(now.getFullYear() - 2);
+      return d;
+    case '5A':
+      d.setFullYear(now.getFullYear() - 5);
+      return d;
+    case '10A':
+      d.setFullYear(now.getFullYear() - 10);
+      return d;
     case 'Tout':
     default: {
       const parsed = new Date(earliestBuyDate);
       return Number.isNaN(parsed.getTime())
-        ? new Date(now.getFullYear() - 5, 0, 1)
+        ? new Date(now.getFullYear() - 10, 0, 1)
         : parsed;
     }
   }
@@ -50,15 +59,18 @@ function buildFallbackQuote(
 
   const isCash = holding.category === 'Cash';
   const points: { date: string; priceEur: number }[] = [];
-  const days = 90;
+  const steps = 120;
+  const totalDays = 3650;
   const now = new Date(refDate);
 
-  for (let i = days; i >= 0; i--) {
+  for (let i = steps; i >= 0; i--) {
     const dt = new Date(now);
-    dt.setDate(now.getDate() - i);
+    const daysBack = Math.round((i / steps) * totalDays);
+    dt.setDate(now.getDate() - daysBack);
+    const progress = (steps - i) / steps;
     const wave = isCash
       ? 1
-      : 1 + Math.sin(i / 7) * 0.025 + ((days - i) / days) * 0.04;
+      : 0.45 + progress * 0.55 + Math.sin(i / 5) * 0.03;
     const price = i === 0 ? basePrice : Number((basePrice * wave).toFixed(2));
     points.push({
       date: dt.toISOString().slice(0, 10),

@@ -2,27 +2,27 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'WealthView — Patrimoine & Bourse',
-  description:
-    'Vue unifiée de vos investissements multi-comptes (Revolut, Trade Republic, banques) sur iPhone.',
+  title: 'WealthView — Patrimoine & IA',
+  description: 'Suivi consolidé de vos investissements multi-comptes avec actualités et conseiller IA.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'WealthView',
   },
+  icons: {
+    icon: '/icon.svg',
+    apple: '/icon.svg',
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#F8FAFC' },
-    { media: '(prefers-color-scheme: dark)', color: '#090C12' },
-  ],
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
+  themeColor: '#0A1628',
 };
 
 export default function RootLayout({
@@ -32,7 +32,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr">
-      <body className="antialiased bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-white">
+      <body className="antialiased bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-slate-100">
         {children}
       </body>
     </html>

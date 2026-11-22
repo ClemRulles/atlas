@@ -6,7 +6,7 @@ export type AssetCategory =
   | 'Cash'
   | 'Or / Matières premières';
 
-export type TimeframeKey = '1J' | '1S' | '1M' | 'YTD' | 'LTM' | 'Tout';
+export type TimeframeKey = '1J' | '1S' | '1M' | 'YTD' | 'LTM' | '2A' | '5A' | '10A' | 'Tout';
 
 export interface PortfolioHolding {
   id: string;

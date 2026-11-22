@@ -1,16 +1,16 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Delete, Fingerprint, Lock, ShieldCheck } from 'lucide-react';
+import { Delete, Lock, ScanFace, ShieldCheck } from 'lucide-react';
 
 interface LockScreenProps {
   onUnlock: () => void;
 }
 
-const PIN_STORAGE_KEY = 'wealthview_pin_hash_v1';
-const BIOMETRIC_CRED_KEY = 'wealthview_webauthn_id_v1';
+export const PIN_STORAGE_KEY = 'wealthview_pin_hash_v1';
+export const BIOMETRIC_CRED_KEY = 'wealthview_webauthn_id_v1';
 
-async function hashPin(pin: string): Promise<string> {
+export async function hashPin(pin: string): Promise<string> {
   const data = new TextEncoder().encode(`wealthview:${pin}`);
   const digest = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(digest))
@@ -98,7 +98,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   const handleBiometricAuth = async () => {
     setError('');
     if (typeof window === 'undefined' || !window.PublicKeyCredential) {
-      setError('Face ID / Touch ID non disponible sur ce navigateur.');
+      setError('Face ID non disponible sur ce navigateur.');
       return;
     }
 
@@ -159,7 +159,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         }
       }
     } catch {
-      setError('Authentification biométrique annulée ou indisponible. Utilisez le code PIN.');
+      setError('Face ID annulé ou indisponible. Utilisez le code PIN.');
     }
   };
 
@@ -171,13 +171,19 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       : 'Déverrouiller WealthView';
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-between px-6 py-10 bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-white select-none">
+    <div
+      style={{
+        paddingTop: 'max(2.75rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(2rem, env(safe-area-inset-bottom))',
+      }}
+      className="min-h-screen flex flex-col items-center justify-between px-6 bg-slate-50 dark:bg-[#090C12] text-slate-900 dark:text-white select-none"
+    >
       <div className="flex flex-col items-center text-center mt-4">
-        <div className="w-14 h-14 rounded-2xl bg-blue-600/15 dark:bg-blue-500/20 flex items-center justify-center mb-4">
+        <div className="w-14 h-14 rounded-2xl bg-[#0A1628] border border-blue-500/30 flex items-center justify-center mb-4 shadow-md">
           {hasSavedPin ? (
-            <Lock className="w-7 h-7 text-blue-600 dark:text-blue-400" />
+            <Lock className="w-7 h-7 text-sky-400" />
           ) : (
-            <ShieldCheck className="w-7 h-7 text-blue-600 dark:text-blue-400" />
+            <ShieldCheck className="w-7 h-7 text-sky-400" />
           )}
         </div>
         <h1 className="text-xl font-bold tracking-tight">{titleText}</h1>
@@ -197,7 +203,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                 key={idx}
                 className={`w-4 h-4 rounded-full transition-all duration-150 ${
                   filled
-                    ? 'bg-blue-600 dark:bg-blue-400 scale-110'
+                    ? 'bg-blue-600 dark:bg-sky-400 scale-110'
                     : 'border-2 border-slate-300 dark:border-slate-700'
                 }`}
               />
@@ -227,11 +233,11 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
             type="button"
             onClick={handleBiometricAuth}
             aria-label="Face ID"
-            className="h-16 rounded-2xl bg-blue-600/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 flex flex-col items-center justify-center active:scale-95 transition"
+            className="h-16 rounded-2xl bg-blue-950/10 dark:bg-sky-500/15 text-blue-900 dark:text-sky-400 flex flex-col items-center justify-center active:scale-95 transition"
           >
-            <Fingerprint className="w-6 h-6" />
+            <ScanFace className="w-6 h-6" />
             <span className="text-[10px] font-semibold mt-0.5">
-              {hasBiometric ? 'Face ID' : 'Activer'}
+              {hasBiometric ? 'Face ID' : 'Face ID'}
             </span>
           </button>
 

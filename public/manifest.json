@@ -1,17 +1,17 @@
 {
   "name": "WealthView",
   "short_name": "WealthView",
-  "description": "Suivi consolidé de portefeuille multi-courtiers sur iPhone",
+  "description": "Gestion de patrimoine multi-comptes et conseiller IA",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#090C12",
-  "theme_color": "#090C12",
-  "orientation": "portrait",
+  "background_color": "#0A1628",
+  "theme_color": "#0A1628",
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }

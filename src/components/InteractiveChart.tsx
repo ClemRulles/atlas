@@ -2,18 +2,31 @@
 
 import React, { useState } from 'react';
 
-interface SeriesPoint {
+export interface SeriesPoint {
   date: string;
   valueEur: number;
+}
+
+export interface RangeSelection {
+  start: SeriesPoint;
+  end: SeriesPoint;
+  diffEur: number;
+  diffPercent: number;
 }
 
 interface InteractiveChartProps {
   data: SeriesPoint[];
   onHoverPoint?: (point: SeriesPoint | null) => void;
+  onRangeSelect?: (range: RangeSelection | null) => void;
 }
 
-export default function InteractiveChart({ data, onHoverPoint }: InteractiveChartProps) {
+export default function InteractiveChart({
+  data,
+  onHoverPoint,
+  onRangeSelect,
+}: InteractiveChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [rangeIndices, setRangeIndices] = useState<[number, number] | null>(null);
 
   if (!data || data.length === 0) {
     return (
@@ -24,7 +37,7 @@ export default function InteractiveChart({ data, onHoverPoint }: InteractiveChar
   }
 
   const width = 400;
-  const height = 160;
+  const height = 165;
   const padX = 8;
   const padY = 14;
 
@@ -35,8 +48,13 @@ export default function InteractiveChart({ data, onHoverPoint }: InteractiveChar
 
   const firstVal = values[0];
   const lastVal = values[values.length - 1];
-  const isPositive = lastVal >= firstVal;
-  const strokeColor = isPositive ? '#10B981' : '#F43F5E';
+  const defaultPositive = lastVal >= firstVal;
+
+  const isRangePositive = rangeIndices
+    ? data[rangeIndices[1]].valueEur >= data[rangeIndices[0]].valueEur
+    : defaultPositive;
+
+  const strokeColor = isRangePositive ? '#10B981' : '#F43F5E';
 
   const coords = data.map((pt, idx) => {
     const x =
@@ -54,30 +72,74 @@ export default function InteractiveChart({ data, onHoverPoint }: InteractiveChar
 
   const areaPath = `${linePath} L ${coords[coords.length - 1].x.toFixed(1)} ${height} L ${coords[0].x.toFixed(1)} ${height} Z`;
 
-  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+  const clientXToIndex = (clientX: number, rect: DOMRect) => {
+    const relX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.min(data.length - 1, Math.round(relX * (data.length - 1)));
+  };
+
+  const handleTouchEvent = (e: React.TouchEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const idx = Math.min(data.length - 1, Math.round(relX * (data.length - 1)));
+    if (e.touches.length >= 2) {
+      const i1 = clientXToIndex(e.touches[0].clientX, rect);
+      const i2 = clientXToIndex(e.touches[1].clientX, rect);
+      const startIdx = Math.min(i1, i2);
+      const endIdx = Math.max(i1, i2);
+      setActiveIndex(null);
+      setRangeIndices([startIdx, endIdx]);
+      onHoverPoint?.(null);
+
+      const startPt = data[startIdx];
+      const endPt = data[endIdx];
+      const diffEur = endPt.valueEur - startPt.valueEur;
+      const diffPercent = startPt.valueEur > 0 ? (diffEur / startPt.valueEur) * 100 : 0;
+      onRangeSelect?.({ start: startPt, end: endPt, diffEur, diffPercent });
+    } else if (e.touches.length === 1) {
+      const idx = clientXToIndex(e.touches[0].clientX, rect);
+      setRangeIndices(null);
+      setActiveIndex(idx);
+      onRangeSelect?.(null);
+      onHoverPoint?.(data[idx]);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<SVGSVGElement>) => {
+    if (e.touches.length === 0) {
+      setActiveIndex(null);
+      setRangeIndices(null);
+      onHoverPoint?.(null);
+      onRangeSelect?.(null);
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (rangeIndices) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const idx = clientXToIndex(e.clientX, rect);
     setActiveIndex(idx);
     onHoverPoint?.(data[idx]);
   };
 
-  const handlePointerLeave = () => {
+  const handleMouseLeave = () => {
     setActiveIndex(null);
+    setRangeIndices(null);
     onHoverPoint?.(null);
+    onRangeSelect?.(null);
   };
 
   const activeCoord = activeIndex !== null ? coords[activeIndex] : null;
+  const rangeStartCoord = rangeIndices ? coords[rangeIndices[0]] : null;
+  const rangeEndCoord = rangeIndices ? coords[rangeIndices[1]] : null;
 
   return (
     <div className="relative w-full">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full h-44 touch-none overflow-visible"
-        onPointerMove={handlePointerMove}
-        onPointerDown={handlePointerMove}
-        onPointerUp={handlePointerLeave}
-        onPointerLeave={handlePointerLeave}
+        className="w-full h-44 touch-none overflow-visible select-none"
+        onTouchStart={handleTouchEvent}
+        onTouchMove={handleTouchEvent}
+        onTouchEnd={handleTouchEnd}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
       >
         <defs>
           <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -87,6 +149,19 @@ export default function InteractiveChart({ data, onHoverPoint }: InteractiveChar
         </defs>
 
         <path d={areaPath} fill="url(#areaGrad)" />
+
+        {rangeStartCoord && rangeEndCoord && (
+          <rect
+            x={rangeStartCoord.x}
+            y={4}
+            width={Math.max(2, rangeEndCoord.x - rangeStartCoord.x)}
+            height={height - 4}
+            fill={strokeColor}
+            fillOpacity="0.14"
+            rx="4"
+          />
+        )}
+
         <path
           d={linePath}
           fill="none"
@@ -110,6 +185,43 @@ export default function InteractiveChart({ data, onHoverPoint }: InteractiveChar
             <circle
               cx={activeCoord.x}
               cy={activeCoord.y}
+              r="5"
+              fill={strokeColor}
+              stroke="#FFFFFF"
+              strokeWidth="2"
+            />
+          </g>
+        )}
+
+        {rangeStartCoord && rangeEndCoord && (
+          <g>
+            <line
+              x1={rangeStartCoord.x}
+              y1={4}
+              x2={rangeStartCoord.x}
+              y2={height}
+              stroke={strokeColor}
+              strokeWidth="1.4"
+            />
+            <circle
+              cx={rangeStartCoord.x}
+              cy={rangeStartCoord.y}
+              r="5"
+              fill={strokeColor}
+              stroke="#FFFFFF"
+              strokeWidth="2"
+            />
+            <line
+              x1={rangeEndCoord.x}
+              y1={4}
+              x2={rangeEndCoord.x}
+              y2={height}
+              stroke={strokeColor}
+              strokeWidth="1.4"
+            />
+            <circle
+              cx={rangeEndCoord.x}
+              cy={rangeEndCoord.y}
               r="5"
               fill={strokeColor}
               stroke="#FFFFFF"
