@@ -4,7 +4,7 @@
  * l'app reste ouverte et les données restent sur l'appareil.
  */
 
-import { createHmac, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, scryptSync, timingSafeEqual } from "node:crypto";
 
 export interface AtlasUser {
   id: string;
@@ -61,9 +61,19 @@ export function readSession(token: string | undefined, secret: string, now = Dat
   }
 }
 
+/**
+ * Secret de session : ATLAS_SESSION_SECRET s'il est posé, sinon dérivé de la clé du stockage Upstash
+ * (déjà secrète et posée automatiquement par Vercel) : une variable de moins à gérer à la main.
+ */
+export function sessionSecret(env: Record<string, string | undefined> = process.env): string {
+  if (env.ATLAS_SESSION_SECRET && env.ATLAS_SESSION_SECRET.length >= 16) return env.ATLAS_SESSION_SECRET;
+  const base = env.KV_REST_API_TOKEN ?? env.UPSTASH_REDIS_REST_TOKEN;
+  return base ? createHash("sha256").update(`atlas-session:${base}`).digest("hex") : "";
+}
+
 export function authConfig() {
   const users = parseUsers(process.env.ATLAS_USERS);
-  const secret = process.env.ATLAS_SESSION_SECRET ?? "";
+  const secret = sessionSecret();
   return { enabled: users.length > 0 && secret.length >= 16, users, secret };
 }
 

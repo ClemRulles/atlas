@@ -27,8 +27,7 @@ Sans configuration, Atlas reste ouvert et garde les données sur l'appareil. Pou
 
 1. **Stockage** : Vercel → projet → Storage → Upstash for Redis (offre gratuite) → Connect au projet. Les variables `KV_REST_API_URL` et `KV_REST_API_TOKEN` sont ajoutées automatiquement.
 2. **Comptes** : chaque personne lance `node scripts/hash-password.mjs clement "Clément"` et tape son mot de passe (il n'est jamais affiché ni stocké en clair). La ligne obtenue va dans `ATLAS_USERS` ; plusieurs comptes sont séparés par `;`.
-3. **Secret de session** : `openssl rand -hex 32` → variable `ATLAS_SESSION_SECRET`.
-4. Redéployer. Toutes les pages et routes demandent alors une connexion (session de 60 jours).
+3. Redéployer. Toutes les pages et routes demandent alors une connexion (session de 60 jours).
 
 À la première connexion, les données déjà présentes sur l'appareil partent dans le compte ; ensuite, la version la plus récente gagne.
 
@@ -86,7 +85,7 @@ Aucune n'est nécessaire pour les phases 1 et 2 : le mode démo est entièrement
 | Variable | Phase | Rôle |
 |---|---|---|
 | `ATLAS_USERS` | Comptes | Comptes autorisés : `identifiant:Prénom:sel:empreinte`, séparés par `;` (voir « Comptes et synchronisation ») |
-| `ATLAS_SESSION_SECRET` | Comptes | Secret de signature des sessions, au moins 16 caractères |
+| `ATLAS_SESSION_SECRET` | Comptes | Facultatif : secret de signature des sessions. Sans lui, il est dérivé de la clé Upstash |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Comptes | Ajoutées par l'intégration Upstash de Vercel ; sans elles, pas de synchronisation |
 | `HOLDINGS_PROVIDER` | 3 | Fournisseur principal de composition : `yahoo`, `eulerpool`, `fmp` ou `finnhub`. Sans réglage : Eulerpool si sa clé est présente, sinon Yahoo |
 | `EULERPOOL_API_KEY` | 3 | Clé Eulerpool (offre gratuite, usage non commercial) |
