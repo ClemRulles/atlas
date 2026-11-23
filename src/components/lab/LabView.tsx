@@ -89,7 +89,12 @@ function Note({ children }: { children: React.ReactNode }) {
 /* ——— Le futur ——— */
 
 function FutureTool({ snapshot, expectedReturn, plansMonthly }: { snapshot: Snapshot; expectedReturn: number; plansMonthly: number }) {
-  const [monthly, setMonthly] = useState(plansMonthly > 0 ? Math.round(plansMonthly / 50) * 50 || 50 : 500);
+  // Point de départ : ce que tu possèdes aujourd'hui et tes plans d'épargne en cours, au centime près.
+  // Le curseur ajoute (ou retire) un effort par-dessus tes plans.
+  const hasPlans = plansMonthly > 0;
+  const [extra, setExtra] = useState(0);
+  const [custom, setCustom] = useState(500);
+  const monthly = hasPlans ? Math.max(0, plansMonthly + extra) : custom;
   const [years, setYears] = useState(15);
   const [profileId, setProfileId] = useState<(typeof PROFILES)[number]["id"]>("equilibre");
   const profile = PROFILES.find((p) => p.id === profileId)!;
@@ -106,6 +111,23 @@ function FutureTool({ snapshot, expectedReturn, plansMonthly }: { snapshot: Snap
 
   return (
     <Card className="flex flex-col gap-5">
+      <p className="text-[14px] text-brume">
+        Départ : ce que tu possèdes aujourd&apos;hui, <Money value={start} />
+        {hasPlans ? (
+          <>
+            , et tes plans d&apos;épargne en cours, <Money value={plansMonthly} /> par mois
+            {extra !== 0 && (
+              <>
+                {" "}
+                {extra > 0 ? "+" : "−"} <Money value={Math.abs(extra)} /> testés en plus
+              </>
+            )}
+            .
+          </>
+        ) : (
+          <>. Ajoute tes plans d&apos;épargne dans « Mon patrimoine » pour qu&apos;ils servent de point de départ.</>
+        )}
+      </p>
       <Headline>
         Dans {years} ans, en {thisYear + years}, le scénario médian donne <Money value={last.p50} className="font-sans text-[0.85em] font-medium" />.{" "}
         <span className="text-brume">
@@ -133,9 +155,15 @@ function FutureTool({ snapshot, expectedReturn, plansMonthly }: { snapshot: Snap
         </ul>
       )}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label={`Versement : ${formatEUR(monthly)} par mois`} hint={plansMonthly > 0 ? `Tes plans d'épargne : ${formatEUR(plansMonthly)} par mois` : undefined}>
-          <input id="futur-versement" type="range" min={0} max={3000} step={50} value={monthly} onChange={(e) => setMonthly(Number(e.target.value))} className="w-full accent-white" />
-        </Field>
+        {hasPlans ? (
+          <Field label={extra === 0 ? `Tes plans : ${formatEUR(plansMonthly)} par mois` : `${extra > 0 ? "En plus" : "En moins"} : ${formatEUR(Math.abs(extra))} par mois`} hint={`Total testé : ${formatEUR(monthly)} par mois`}>
+            <input id="futur-effort" type="range" min={-Math.round(plansMonthly / 10) * 10} max={1500} step={10} value={extra} onChange={(e) => setExtra(Number(e.target.value))} className="w-full accent-white" />
+          </Field>
+        ) : (
+          <Field label={`Versement : ${formatEUR(custom)} par mois`}>
+            <input id="futur-versement" type="range" min={0} max={3000} step={50} value={custom} onChange={(e) => setCustom(Number(e.target.value))} className="w-full accent-white" />
+          </Field>
+        )}
         <Field label={`Horizon : ${years} ans`}>
           <input id="futur-horizon" type="range" min={1} max={40} step={1} value={years} onChange={(e) => setYears(Number(e.target.value))} className="w-full accent-white" />
         </Field>
