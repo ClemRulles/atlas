@@ -17,7 +17,7 @@ const monthYear = (d: string) => new Intl.DateTimeFormat("fr-BE", { month: "long
  * chose change dans l'app. Plans d'épargne, lignes, dépenses, données.
  */
 export function PatrimoineView() {
-  const { snapshot, data, mode, portfolio, openSheet, deletePlan, planPending, settings } = useAtlas();
+  const { snapshot, data, mode, portfolio, openSheet, deletePlan, planPending, settings, account, logout } = useAtlas();
   const [confirm, setConfirm] = useState<string | null>(null);
   if (!snapshot || !data) return <PageSkeleton />;
   const demo = mode === "demo";
@@ -152,8 +152,26 @@ export function PatrimoineView() {
       <Reveal i={4}>
         <Card className="flex flex-col gap-3">
           <span className="repere">Mes données</span>
-          <p className="text-[14px] text-brume">Sauvegarde, import, démo.</p>
-          <button type="button" onClick={() => openSheet("mode")} className="touche verre self-start rounded-full px-4 py-2.5 text-[14px]">Ouvrir</button>
+          {account?.user ? (
+            <p className="text-[14px]">
+              Connecté en tant que {account.user.name}.{" "}
+              <span className="text-brume">
+                {account.sync
+                  ? account.status === "error"
+                    ? "Dernier enregistrement échoué : tes données restent sur cet appareil, nouvel essai au prochain changement."
+                    : "Tes données sont enregistrées dans ton compte et suivent tous tes appareils."
+                  : "La synchronisation n'est pas encore configurée sur le serveur : tes données restent sur cet appareil."}
+              </span>
+            </p>
+          ) : (
+            <p className="text-[14px] text-brume">Tes données restent sur cet appareil. Exporte-les pour les garder à l&apos;abri.</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => openSheet("mode")} className="touche verre rounded-full px-4 py-2.5 text-[14px]">Sauvegarde et démo</button>
+            {account?.user && (
+              <button type="button" onClick={logout} className="touche rounded-full px-4 py-2.5 text-[14px] text-brume underline decoration-white/20 underline-offset-2">Se déconnecter</button>
+            )}
+          </div>
         </Card>
       </Reveal>
     </div>

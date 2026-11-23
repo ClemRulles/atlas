@@ -45,7 +45,17 @@ export interface MarketStatus {
   failed: string[];
 }
 
+export interface Account {
+  enabled: boolean;
+  user: { id: string; name: string } | null;
+  /** Vrai quand les données du compte sont enregistrées sur le serveur. */
+  sync: boolean;
+  status: "idle" | "saving" | "saved" | "error";
+}
+
 interface AtlasState {
+  account: Account | null;
+  logout: () => void;
   /** `null` tant que l'app n'a pas démarré côté navigateur. */
   mode: Mode | null;
   data: PortfolioData | null;
@@ -104,6 +114,8 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
   const [market, setMarket] = useState<MarketStatus>({ loading: false, updatedAt: null, failed: [] });
   const [compositionCache, setCompositionCache] = useState<CompositionCache>({});
   const [quoteTargets, setQuoteTargets] = useState<{ key: string; symbol: string }[]>([]);
+  const [account, setAccount] = useState<Account | null>(null);
+  const syncReady = useRef(false);
   const cacheRef = useRef(cache);
   useEffect(() => {
     cacheRef.current = cache;
@@ -121,11 +133,29 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
       ]);
       if (!alive) return;
       if (savedCompositions) setCompositionCache(savedCompositions);
+      // Compte connecté : les données du serveur passent devant celles de l'appareil si elles sont plus récentes.
+      const me = await fetch("/api/auth/me").then((r) => r.json()).catch(() => null);
+      let fromServer = false;
+      if (me?.sync) {
+        const remote = await fetch("/api/data").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+        const localStamp = (await dbGet<number>("updatedAt")) ?? 0;
+        const doc = remote?.data as { portfolio?: UserPortfolio; settings?: Settings; updatedAt?: number } | null;
+        if (doc?.portfolio && (doc.updatedAt ?? 0) > localStamp) {
+          setPortfolio(doc.portfolio);
+          if (doc.settings) setSettings(doc.settings);
+          void dbSet("portfolio", doc.portfolio);
+          if (doc.settings) void dbSet("settings", doc.settings);
+          void dbSet("updatedAt", doc.updatedAt ?? Date.now());
+          fromServer = doc.portfolio.transactions.length > 0 || (doc.portfolio.plans?.length ?? 0) > 0;
+        }
+      }
+      if (!alive) return;
+      setAccount(me ? { enabled: !!me.enabled, user: me.user ?? null, sync: !!me.sync, status: "idle" } : null);
       if (savedPortfolio) setPortfolio(savedPortfolio);
       if (savedSettings) setSettings(savedSettings);
       if (savedCache) setCache(savedCache);
       setToday(localToday());
-      setModeState(read(MODE_KEY) === "real" ? "real" : "demo");
+      setModeState(fromServer || read(MODE_KEY) === "real" ? "real" : "demo");
       setDiscreet(read(DISCREET_KEY) === "1");
       setLoaded(true);
     })();
@@ -137,6 +167,34 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.classList.toggle("discret", discreet);
   }, [discreet]);
+
+  // Synchronisation : chaque changement de positions, plans ou réglages part sur le compte, regroupé.
+  useEffect(() => {
+    if (!loaded || !account?.sync) return;
+    if (!syncReady.current) {
+      // Le premier passage suit le chargement : rien à renvoyer.
+      syncReady.current = true;
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const updatedAt = Date.now();
+      void dbSet("updatedAt", updatedAt);
+      setAccount((a) => (a ? { ...a, status: "saving" } : a));
+      const ok = await fetch("/api/data", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ portfolio, settings, updatedAt }) })
+        .then((r) => r.ok)
+        .catch(() => false);
+      setAccount((a) => (a ? { ...a, status: ok ? "saved" : "error" } : a));
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [loaded, account?.sync, portfolio, settings]);
+
+  const logout = useCallback(() => {
+    void fetch("/api/auth/logout", { method: "POST" }).finally(() => {
+      // Rechargement complet voulu : on repart d'un état vide sur la page de connexion.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = "/login";
+    });
+  }, []);
 
   const refreshMarket = useCallback(
     async (force = false) => {
@@ -306,6 +364,8 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
+      account,
+      logout,
       mode,
       data,
       snapshot,
@@ -327,7 +387,7 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
       restore,
       refreshMarket: (force?: boolean) => void refreshMarket(force),
     }),
-    [mode, data, snapshot, portfolio, settings, market, setMode, discreet, toggleDiscreet, sheet, addPreset, openSheet, addTransactions, deleteTransaction, savePlan, deletePlan, planPending, saveSettings, restore, refreshMarket],
+    [account, logout, mode, data, snapshot, portfolio, settings, market, setMode, discreet, toggleDiscreet, sheet, addPreset, openSheet, addTransactions, deleteTransaction, savePlan, deletePlan, planPending, saveSettings, restore, refreshMarket],
   );
   return <AtlasContext.Provider value={value}>{children}</AtlasContext.Provider>;
 }

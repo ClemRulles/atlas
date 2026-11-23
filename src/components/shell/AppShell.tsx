@@ -19,6 +19,15 @@ export const PAGES = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  if (pathname === "/login") {
+    return (
+      <div className="relative z-10 mx-auto w-full pl-[max(20px,env(safe-area-inset-left))] pr-[max(20px,env(safe-area-inset-right))] pt-[calc(14px+env(safe-area-inset-top))]">
+        <div className="aurore" aria-hidden="true"><i /><i /><i /></div>
+        <div className="relative">{children}</div>
+      </div>
+    );
+  }
   return (
     <AtlasProvider>
       <ServiceWorker />

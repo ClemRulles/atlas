@@ -18,8 +18,29 @@ Trois pages, trois questions :
 | 2 | Saisie des positions, cours réels, graphe d'évolution | Fait : recherche par nom/ticker/ISIN, achat et vente, import CSV, cours Yahoo, courbe réelle, dépenses, sauvegarde JSON |
 | 3 | Composition des ETF, page « Ce que tu possèdes » | Fait : compositions (Yahoo par défaut, Eulerpool/FMP/Finnhub en option), ETF traversés dans la phrase du jour, actualités et dates de résultats |
 | 4 | Laboratoire « Et si » | Fait : simulateur Monte Carlo en cône avec paliers, crises 2008/Covid/2022, jumeau paresseux, avant d'acheter, choc sur mesure, journal de convictions |
-| 5 | Chat et import par capture d'écran (sans IA) | Reportée. La phrase du jour, elle, est déjà faite sans IA |
+| 5 | Chat et import par capture d'écran (sans IA) | Fait : capture lue dans le navigateur (Tesseract.js), chat qui répond à partir des chiffres calculés |
 | 6 | PWA, finitions, déploiement Vercel | Fait : installable sur iPhone (manifeste, icônes, plein écran), ouverture hors ligne avec les derniers cours, déploiement par Vercel à chaque push |
+
+## Comptes et synchronisation
+
+Sans configuration, Atlas reste ouvert et garde les données sur l'appareil. Pour des comptes avec mot de passe (un par personne) et des données qui suivent chaque appareil :
+
+1. **Stockage** : Vercel → projet → Storage → Upstash for Redis (offre gratuite) → Connect au projet. Les variables `KV_REST_API_URL` et `KV_REST_API_TOKEN` sont ajoutées automatiquement.
+2. **Comptes** : chaque personne lance `node scripts/hash-password.mjs clement "Clément"` et tape son mot de passe (il n'est jamais affiché ni stocké en clair). La ligne obtenue va dans `ATLAS_USERS` ; plusieurs comptes sont séparés par `;`.
+3. **Secret de session** : `openssl rand -hex 32` → variable `ATLAS_SESSION_SECRET`.
+4. Redéployer. Toutes les pages et routes demandent alors une connexion (session de 60 jours).
+
+À la première connexion, les données déjà présentes sur l'appareil partent dans le compte ; ensuite, la version la plus récente gagne.
+
+## Saisir ses placements
+
+Tout se fait en euros ; l'app retrouve elle-même les cours et la devise du titre :
+
+- **Plan d'épargne** : montant par mois, jour (2 par défaut, comme Trade Republic), depuis quand. Chaque versement est recréé au cours de clôture du jour d'exécution et le plan continue seul les mois suivants.
+- **Je possède** : la valeur affichée chez le courtier (ou le nombre de parts) et, si on le sait, le total investi.
+- **Un achat / une vente** : une date et un montant en euros.
+- **Capture d'écran** : la liste du portefeuille Trade Republic, lue sur l'appareil ; chaque ligne est validée avant l'import.
+- **CSV** : `Date;ISIN;Montant` suffit (montant en euros).
 
 ## Installer sur iPhone
 
@@ -64,6 +85,9 @@ Aucune n'est nécessaire pour les phases 1 et 2 : le mode démo est entièrement
 
 | Variable | Phase | Rôle |
 |---|---|---|
+| `ATLAS_USERS` | Comptes | Comptes autorisés : `identifiant:Prénom:sel:empreinte`, séparés par `;` (voir « Comptes et synchronisation ») |
+| `ATLAS_SESSION_SECRET` | Comptes | Secret de signature des sessions, au moins 16 caractères |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Comptes | Ajoutées par l'intégration Upstash de Vercel ; sans elles, pas de synchronisation |
 | `HOLDINGS_PROVIDER` | 3 | Fournisseur principal de composition : `yahoo`, `eulerpool`, `fmp` ou `finnhub`. Sans réglage : Eulerpool si sa clé est présente, sinon Yahoo |
 | `EULERPOOL_API_KEY` | 3 | Clé Eulerpool (offre gratuite, usage non commercial) |
 | `FMP_API_KEY` | 3 | Clé Financial Modeling Prep, si ce fournisseur est choisi |
