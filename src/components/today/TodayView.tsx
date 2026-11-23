@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
+import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { Sheet } from "@/components/shell/Sheet";
 import { EmptyPortfolio, PageSkeleton } from "@/components/shell/states";
@@ -199,12 +200,12 @@ function EvolutionBlock({ snapshot }: { snapshot: Snapshot }) {
 
 function LifeSlicesCard({ snapshot, expectedReturn }: { snapshot: Snapshot; expectedReturn: number }) {
   const { life } = snapshot;
-  const { openSheet } = useAtlas();
+  const router = useRouter();
   return (
     <Card className="flex flex-col gap-4">
       <div className="flex items-baseline justify-between gap-3">
         <span className="repere">Morceaux de vie</span>
-        <button type="button" onClick={() => (haptic(), openSheet("expenses"))} className="touche repere rounded-full border border-white/10 px-2.5 py-1 hover:text-brume">
+        <button type="button" onClick={() => (haptic(), router.push("/patrimoine#depenses"))} className="touche repere rounded-full border border-white/10 px-2.5 py-1 hover:text-brume">
           {formatPct(expectedReturn, { decimals: 1 })} / an · modifier
         </button>
       </div>
@@ -232,7 +233,7 @@ function LifeSlicesCard({ snapshot, expectedReturn }: { snapshot: Snapshot; expe
         ) : (
           "Toutes tes dépenses renseignées sont couvertes."
         )}
-        <span className="text-ombre"> Hypothèse de rendement, pas une promesse.</span>
+        <span className="block text-ombre">Revenu théorique : ton patrimoine × {formatPct(expectedReturn, { decimals: 1 })} ÷ 12. Tes dépenses ne sont pas déduites, elles servent de repère.</span>
       </p>
     </Card>
   );
@@ -318,10 +319,10 @@ function PositionSheet({ line, onClose, transactions, editable }: { line: LineVi
           {editable && (
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => openSheet("add", { instrument: line.instrument, side: "buy" })} className="touche verre rounded-full py-3 text-[14px]">
+                <button type="button" onClick={() => openSheet("add", { instrument: line.instrument, kind: "buy" })} className="touche verre rounded-full py-3 text-[14px]">
                   Acheter encore
                 </button>
-                <button type="button" onClick={() => openSheet("add", { instrument: line.instrument, side: "sell" })} className="touche verre rounded-full py-3 text-[14px]">
+                <button type="button" onClick={() => openSheet("add", { instrument: line.instrument, kind: "sell" })} className="touche verre rounded-full py-3 text-[14px]">
                   Vendre
                 </button>
               </div>

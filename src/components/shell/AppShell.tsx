@@ -8,6 +8,7 @@ import { IconChat, IconEye, IconEyeOff, IconOwn, IconPlus, IconToday, IconWhatIf
 import { AtlasProvider, useAtlas } from "@/lib/store";
 import { auroraFor, haptic } from "@/lib/ui";
 import { AddSheet } from "@/components/add/AddSheet";
+import { CaptureSheet } from "@/components/add/CaptureSheet";
 import { CsvSheet } from "@/components/add/CsvSheet";
 import { ChatSheet, ExpensesSheet, ModeSheet } from "./sheets";
 
@@ -29,6 +30,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Dock />
       <AddSheet />
       <CsvSheet />
+      <CaptureSheet />
       <ChatSheet />
       <ModeSheet />
       <ExpensesSheet />
@@ -66,20 +68,16 @@ function Aurora() {
 }
 
 function TopBar() {
-  const { mode, discreet, toggleDiscreet, openSheet } = useAtlas();
+  const { mode, discreet, toggleDiscreet } = useAtlas();
   return (
     <header className="flex items-center justify-between gap-3 pb-6">
       <span className="font-serif text-[22px] italic tracking-[-0.01em]">Atlas</span>
       <div className="flex items-center gap-2">
         {mode && (
-          <button
-            type="button"
-            onClick={() => openSheet("mode")}
-            className="touche verre flex h-10 items-center gap-2 rounded-full px-4 text-[13px] text-brume"
-          >
+          <Link href="/patrimoine" className="touche verre flex h-10 items-center gap-2 rounded-full px-4 text-[13px] text-brume" onClick={() => haptic()}>
             <span className={`h-1.5 w-1.5 rounded-full ${mode === "demo" ? "bg-lavande" : "bg-menthe"}`} />
-            {mode === "demo" ? "Portefeuille démo" : "Mon portefeuille"}
-          </button>
+            {mode === "demo" ? "Démo · mon patrimoine" : "Mon patrimoine"}
+          </Link>
         )}
         <button
           type="button"

@@ -4,7 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { analyze, localToday, type PortfolioData, type Snapshot } from "@/lib/analysis";
 import { dbGet, dbSet } from "@/lib/db";
 import { buildDemoPortfolio } from "@/lib/demo/portfolio";
-import type { FundComposition, Instrument, Transaction } from "@/lib/domain/types";
+import type { FundComposition, Instrument, SavingsPlan, Transaction } from "@/lib/domain/types";
+import { withPlans } from "@/lib/domain/plans";
 import { fetchComposition, refreshSeries } from "@/lib/market-client";
 import {
   companiesToQuote,
@@ -27,11 +28,13 @@ import {
 } from "@/lib/user-data";
 
 export type Mode = "demo" | "real";
-export type SheetName = "add" | "csv" | "chat" | "mode" | "expenses" | null;
+export type SheetName = "add" | "csv" | "capture" | "chat" | "mode" | "expenses" | null;
+
+export type EntryKind = "plan" | "own" | "buy" | "sell";
 
 export interface AddPreset {
   instrument?: Instrument;
-  side?: "buy" | "sell";
+  kind?: EntryKind;
 }
 
 export interface MarketStatus {
@@ -58,6 +61,10 @@ interface AtlasState {
   openSheet: (sheet: SheetName, preset?: AddPreset) => void;
   addTransactions: (instruments: Instrument[], transactions: Transaction[]) => void;
   deleteTransaction: (id: string) => void;
+  savePlan: (instrument: Instrument, plan: SavingsPlan) => void;
+  deletePlan: (id: string) => void;
+  /** Exécutions de plans dont le cours n'est pas encore chargé. */
+  planPending: number;
   saveSettings: (settings: Settings) => void;
   restore: (backup: Backup) => void;
   refreshMarket: (force?: boolean) => void;
@@ -185,10 +192,11 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
     if (!loaded || !mode || !today) return null;
     if (mode === "demo") return { ...buildDemoPortfolio(today), expenses: settings.expenses, expectedReturn: settings.expectedReturn };
     const companyQuotes = companyQuotesFrom(quoteTargets, cache);
+    const market = withCompanyFx(marketFrom(portfolio, cache), companyQuotes, cache);
     return {
       instruments: portfolio.instruments,
-      transactions: portfolio.transactions,
-      market: withCompanyFx(marketFrom(portfolio, cache), companyQuotes, cache),
+      transactions: withPlans(portfolio.transactions, portfolio.plans ?? [], portfolio.instruments, market, today).transactions,
+      market,
       compositions: compositionsFrom(compositionCache),
       companyQuotes,
       expenses: settings.expenses,
@@ -196,6 +204,10 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
     };
   }, [loaded, mode, today, portfolio, cache, settings, compositionCache, quoteTargets]);
   const snapshot = useMemo(() => (data && today ? analyze(data, today) : null), [data, today]);
+  const planPending = useMemo(
+    () => (data && today && mode === "real" ? withPlans([], portfolio.plans ?? [], portfolio.instruments, data.market, today).pending : 0),
+    [data, today, mode, portfolio],
+  );
 
   // Cours des grandes entreprises tenues via les fonds : c'est ce qui permet de dire « merci Nvidia ».
   const targetsKey = snapshot && mode === "real" ? JSON.stringify(companiesToQuote(snapshot.exposure.companies)) : "[]";
@@ -245,30 +257,40 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
     setPortfolio(next);
     void dbSet("portfolio", next);
   }, []);
-  const addTransactions = useCallback(
-    (instruments: Instrument[], transactions: Transaction[]) => {
-      setPortfolio((current) => {
-        const next: UserPortfolio = {
-          instruments: { ...current.instruments, ...Object.fromEntries(instruments.map((i) => [i.id, { ...current.instruments[i.id], ...i }])) },
-          transactions: [...current.transactions, ...transactions],
-        };
-        void dbSet("portfolio", next);
-        return next;
-      });
-      setMode("real");
-    },
-    [setMode],
-  );
-  const deleteTransaction = useCallback((id: string) => {
+  /** Applique un changement au portefeuille, retire les lignes devenues inutiles et enregistre. */
+  const updatePortfolio = useCallback((change: (current: UserPortfolio) => UserPortfolio) => {
     setPortfolio((current) => {
-      const transactions = current.transactions.filter((t) => t.id !== id);
-      const used = new Set(transactions.map((t) => t.instrumentId));
-      const instruments = Object.fromEntries(Object.entries(current.instruments).filter(([key]) => used.has(key)));
-      const next = { instruments, transactions };
+      const changed = change(current);
+      const used = new Set([...changed.transactions.map((t) => t.instrumentId), ...(changed.plans ?? []).map((p) => p.instrumentId)]);
+      const next = { ...changed, instruments: Object.fromEntries(Object.entries(changed.instruments).filter(([key]) => used.has(key))) };
       void dbSet("portfolio", next);
       return next;
     });
   }, []);
+  const mergeInstruments = (current: UserPortfolio, instruments: Instrument[]) => ({
+    ...current.instruments,
+    ...Object.fromEntries(instruments.map((i) => [i.id, { ...current.instruments[i.id], ...i }])),
+  });
+  const addTransactions = useCallback(
+    (instruments: Instrument[], transactions: Transaction[]) => {
+      updatePortfolio((current) => ({ ...current, instruments: mergeInstruments(current, instruments), transactions: [...current.transactions, ...transactions] }));
+      setMode("real");
+    },
+    [setMode, updatePortfolio],
+  );
+  const deleteTransaction = useCallback((id: string) => updatePortfolio((current) => ({ ...current, transactions: current.transactions.filter((t) => t.id !== id) })), [updatePortfolio]);
+  const savePlan = useCallback(
+    (instrument: Instrument, plan: SavingsPlan) => {
+      updatePortfolio((current) => ({
+        ...current,
+        instruments: mergeInstruments(current, [instrument]),
+        plans: [...(current.plans ?? []).filter((p) => p.id !== plan.id), plan],
+      }));
+      setMode("real");
+    },
+    [setMode, updatePortfolio],
+  );
+  const deletePlan = useCallback((id: string) => updatePortfolio((current) => ({ ...current, plans: (current.plans ?? []).filter((p) => p.id !== id) })), [updatePortfolio]);
   const saveSettings = useCallback((next: Settings) => {
     setSettings(next);
     void dbSet("settings", next);
@@ -298,11 +320,14 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
       openSheet,
       addTransactions,
       deleteTransaction,
+      savePlan,
+      deletePlan,
+      planPending,
       saveSettings,
       restore,
       refreshMarket: (force?: boolean) => void refreshMarket(force),
     }),
-    [mode, data, snapshot, portfolio, settings, market, setMode, discreet, toggleDiscreet, sheet, addPreset, openSheet, addTransactions, deleteTransaction, saveSettings, restore, refreshMarket],
+    [mode, data, snapshot, portfolio, settings, market, setMode, discreet, toggleDiscreet, sheet, addPreset, openSheet, addTransactions, deleteTransaction, savePlan, deletePlan, planPending, saveSettings, restore, refreshMarket],
   );
   return <AtlasContext.Provider value={value}>{children}</AtlasContext.Provider>;
 }

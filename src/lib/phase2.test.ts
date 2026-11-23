@@ -67,6 +67,11 @@ describe("données de marché", () => {
 describe("cache des cours", () => {
   const today = "2026-11-22";
 
+  it("charge les cours d'un titre suivi seulement par un plan d'épargne, depuis le début du plan", () => {
+    const withPlan: UserPortfolio = { ...portfolio, plans: [{ id: "p", instrumentId: "NVDA", amountEUR: 100, dayOfMonth: 2, start: "2024-01-01" }] };
+    expect(seriesNeeded(withPlan, today)).toEqual(expect.arrayContaining([{ key: "NVDA", from: "2023-12-25" }, { key: fxKey("USD"), from: "2023-12-25" }]));
+  });
+
   it("demande chaque ligne et chaque devise depuis le premier achat, avec une marge", () => {
     const needs = seriesNeeded(portfolio, today);
     expect(needs).toEqual(
@@ -109,7 +114,7 @@ describe("sauvegarde", () => {
   it("relit ce qu'elle a exporté", () => {
     const backup = makeBackup(portfolio, DEFAULT_SETTINGS, new Date("2026-11-22T10:00:00Z"));
     const read = readBackup(JSON.parse(JSON.stringify(backup)));
-    expect(read).toEqual({ ok: true, backup });
+    expect(read).toEqual({ ok: true, backup: { ...backup, portfolio: { ...backup.portfolio, plans: [] } } });
   });
 
   it("refuse un fichier qui n'est pas une sauvegarde Atlas ou une transaction bancale", () => {
@@ -139,7 +144,13 @@ describe("import CSV", () => {
     expect(parsed.missing).toEqual([]);
     expect(parsed.rows[0]).toMatchObject({ date: "2024-03-05", isin: "IE00B4L5Y983", name: "iShares Core MSCI World", quantity: 10, price: 85.12, fees: 2, side: "buy", broker: "Bolero", problems: [] });
     expect(parsed.rows[1]).toMatchObject({ side: "sell", quantity: 2, price: 180.5 });
-    expect(parsed.rows[2].problems).toEqual(["date illisible", "prix manquant", "ISIN invalide"]);
+    expect(parsed.rows[2].problems).toEqual(["date illisible", "prix ou montant manquant", "ISIN invalide"]);
+  });
+
+  it("accepte le format simple : date, ISIN et montant en euros", () => {
+    const parsed = parseCsv("Date;ISIN;Montant\n02/03/2025;IE00B4L5Y983;200\n");
+    expect(parsed.missing).toEqual([]);
+    expect(parsed.rows[0]).toMatchObject({ date: "2025-03-02", isin: "IE00B4L5Y983", amount: 200, quantity: null, price: null, side: "buy", problems: [] });
   });
 
   it("lit un export anglais à virgules avec ticker", () => {
@@ -148,7 +159,7 @@ describe("import CSV", () => {
   });
 
   it("signale les colonnes indispensables absentes", () => {
-    expect(parseCsv("Nom;Montant\nX;12").missing).toEqual(["date", "quantity", "price", "isin"]);
+    expect(parseCsv("Nom;Valeurs\nX;12").missing).toEqual(["date", "quantity", "isin"]);
   });
 
   it("lit les nombres et les dates dans tous les formats courants", () => {
@@ -181,8 +192,8 @@ describe("noms et création de ligne", () => {
   });
 
   it("compte la quantité détenue à une date", () => {
-    expect(heldQuantity(portfolio, "IWDA.AS", "2024-12-31")).toBe(15);
-    expect(heldQuantity(portfolio, "IWDA.AS", "2023-06-01")).toBe(5);
+    expect(heldQuantity(portfolio.transactions, "IWDA.AS", "2024-12-31")).toBe(15);
+    expect(heldQuantity(portfolio.transactions, "IWDA.AS", "2023-06-01")).toBe(5);
   });
 });
 

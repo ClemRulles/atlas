@@ -5,7 +5,7 @@
 
 import { isValidIsin } from "@/lib/market-format";
 
-export type Field = "date" | "isin" | "symbol" | "name" | "quantity" | "price" | "fees" | "side" | "broker" | "currency";
+export type Field = "date" | "isin" | "symbol" | "name" | "quantity" | "price" | "amount" | "fees" | "side" | "broker" | "currency";
 
 const HEADERS: Record<Field, RegExp> = {
   date: /^(date|datum|trade ?date|date d'ex[ée]cution|jour)$/i,
@@ -13,7 +13,8 @@ const HEADERS: Record<Field, RegExp> = {
   symbol: /^(ticker|symbole?|symbol|code)$/i,
   name: /^(nom|name|produit|product|titre|instrument|valeur|libell[ée])$/i,
   quantity: /^(quantit[ée]|quantity|qty|nombre|aantal|parts|shares)$/i,
-  price: /^(prix|price|cours|koers|prix unitaire|unit price)$/i,
+  price: /^(prix|price|cours|koers|prix unitaire|unit price)( ?\(?€\)?)?$/i,
+  amount: /^(montant|amount|bedrag|total|montant investi|montant \(€\)|montant €|investi|valeur)$/i,
   fees: /^(frais|fees|costs?|kosten|commission|frais de transaction)$/i,
   side: /^(sens|type|side|action|op[ée]ration|transaction|achat\/vente|buy\/sell)$/i,
   broker: /^(courtier|broker|compte|account)$/i,
@@ -89,7 +90,10 @@ export interface CsvRow {
   symbol: string | null;
   name: string | null;
   quantity: number | null;
+  /** Prix unitaire, en euros sauf si une colonne Devise dit autre chose. */
   price: number | null;
+  /** Montant total payé (achat) ou reçu (vente), en euros. */
+  amount: number | null;
   fees: number | null;
   side: "buy" | "sell";
   broker: string | null;
@@ -116,7 +120,8 @@ export function parseCsv(text: string): CsvParse {
     const field = (Object.keys(HEADERS) as Field[]).find((f) => HEADERS[f].test(h.trim()));
     if (field && columns[field] === undefined) columns[field] = i;
   });
-  const missing = (["date", "quantity", "price"] as Field[]).filter((f) => columns[f] === undefined);
+  const missing = (["date"] as Field[]).filter((f) => columns[f] === undefined);
+  if (columns.amount === undefined && (columns.quantity === undefined || columns.price === undefined)) missing.push(columns.quantity === undefined ? "quantity" : "price");
   if (columns.isin === undefined && columns.symbol === undefined) missing.push("isin");
 
   const rows = lines.slice(1).map((line, index): CsvRow => {
@@ -132,6 +137,10 @@ export function parseCsv(text: string): CsvParse {
       name: get("name")?.trim() || null,
       quantity: rawQuantity === null ? null : Math.abs(rawQuantity),
       price: parseNumber(get("price")),
+      amount: (() => {
+        const a = parseNumber(get("amount"));
+        return a === null ? null : Math.abs(a);
+      })(),
       fees: (() => {
         const f = parseNumber(get("fees"));
         return f === null ? null : Math.abs(f);
@@ -142,8 +151,9 @@ export function parseCsv(text: string): CsvParse {
       problems: [],
     };
     if (!row.date) row.problems.push("date illisible");
-    if (!row.quantity) row.problems.push("quantité manquante");
-    if (!row.price || row.price <= 0) row.problems.push("prix manquant");
+    const hasAmount = !!row.amount && row.amount > 0;
+    if (!row.quantity && !(hasAmount && row.side === "buy")) row.problems.push("quantité manquante");
+    if ((!row.price || row.price <= 0) && !hasAmount) row.problems.push("prix ou montant manquant");
     if (row.isin && !isValidIsin(row.isin)) row.problems.push("ISIN invalide");
     if (!row.isin && !row.symbol) row.problems.push("ni ISIN ni ticker");
     return row;

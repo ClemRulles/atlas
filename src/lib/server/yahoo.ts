@@ -1,7 +1,7 @@
 import "server-only";
 import YahooFinance from "yahoo-finance2";
 import type { AssetType, PricePoint } from "@/lib/domain/types";
-import { assetTypeOf, cleanCloses, countryFr, exchangeRank, isValidIsin, normalizeCurrency, sectorFr } from "@/lib/market-format";
+import { assetTypeOf, cleanCloses, countryFr, displayName, exchangeRank, isValidIsin, normalizeCurrency, sectorFr } from "@/lib/market-format";
 
 /**
  * Accès à Yahoo Finance côté serveur, avec un cache mémoire par instance.
@@ -69,11 +69,22 @@ export function search(query: string): Promise<SearchResult[]> {
         .filter((x) => x.symbol && roots.includes(x.symbol.split(".")[0]))
         .map((x) => toResult(x, isin))
         .filter((x): x is SearchResult => !!x);
-      results = [...direct, ...siblings];
+      // Les autres places portent souvent un autre ticker (VWRA à Londres, VWCE à Francfort) : on cherche
+      // aussi par nom, et on ne garde que les cotations au nom strictement identique (même classe de parts).
+      const exact = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const names = new Set(direct.map((r) => exact(r.name)));
+      const byName = (await rawSearch(displayName(direct[0].name)).catch(() => []))
+        .map((x) => toResult(x, isin))
+        .filter((x): x is SearchResult => !!x && names.has(exact(x.name)));
+      results = [...direct, ...siblings, ...byName];
     }
     const unique = new Map<string, SearchResult>();
     for (const r of results) if (!unique.has(r.symbol)) unique.set(r.symbol, r);
-    return [...unique.values()].sort((a, b) => (isin ? exchangeRank(a.exchangeCode) - exchangeRank(b.exchangeCode) : 0)).slice(0, 12);
+    // Pour un même produit, la cotation en euros d'une place européenne passe d'abord (un investisseur belge paie en euros).
+    const list = [...unique.values()];
+    const family = (r: SearchResult) => r.name.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(" ").slice(0, 2).join(" ");
+    const order = [...new Set(list.map(family))];
+    return order.flatMap((f) => list.filter((r) => family(r) === f).sort((a, b) => exchangeRank(a.exchangeCode) - exchangeRank(b.exchangeCode))).slice(0, 12);
   });
 }
 

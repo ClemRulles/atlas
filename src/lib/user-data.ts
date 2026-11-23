@@ -4,12 +4,14 @@
  */
 
 import type { CompanyQuotes } from "@/lib/domain/contributors";
-import type { Compositions, Expense, FundComposition, Instrument, MarketData, PricePoint, Transaction } from "@/lib/domain/types";
+import type { Compositions, Expense, FundComposition, Instrument, MarketData, PricePoint, SavingsPlan, Transaction } from "@/lib/domain/types";
 import { displayName } from "@/lib/market-format";
 
 export interface UserPortfolio {
   instruments: Record<string, Instrument>;
   transactions: Transaction[];
+  /** Plans d'épargne : leurs achats sont recalculés à partir des cours, jamais stockés. */
+  plans?: SavingsPlan[];
 }
 
 export interface Settings {
@@ -28,7 +30,7 @@ export interface CachedSeries {
 
 export type MarketCache = Record<string, CachedSeries>;
 
-export const EMPTY_PORTFOLIO: UserPortfolio = { instruments: {}, transactions: [] };
+export const EMPTY_PORTFOLIO: UserPortfolio = { instruments: {}, transactions: [], plans: [] };
 
 export const DEFAULT_SETTINGS: Settings = {
   expenses: [
@@ -55,7 +57,7 @@ function minusDays(date: string, days: number): string {
 /** Séries de cours à charger : chaque ligne et chaque devise étrangère, depuis le premier achat. */
 export function seriesNeeded(portfolio: UserPortfolio, today: string): SeriesNeed[] {
   const first = new Map<string, string>();
-  for (const t of portfolio.transactions) {
+  for (const t of [...portfolio.transactions, ...(portfolio.plans ?? []).map((p) => ({ instrumentId: p.instrumentId, date: p.start }))]) {
     const current = first.get(t.instrumentId);
     if (!current || t.date < current) first.set(t.instrumentId, t.date);
   }
@@ -150,6 +152,12 @@ export function readBackup(raw: unknown): { ok: true; backup: Backup } | { ok: f
       return { ok: false, error: "Une transaction de la sauvegarde est illisible." };
     }
   }
+  const plans = Array.isArray(portfolio.plans) ? portfolio.plans : [];
+  for (const p of plans) {
+    if (!isObject(p) || typeof p.id !== "string" || typeof p.instrumentId !== "string" || !(p.instrumentId in portfolio.instruments) || !positive(p.amountEUR) || typeof p.start !== "string" || !DATE.test(p.start) || typeof p.dayOfMonth !== "number") {
+      return { ok: false, error: "Un plan d'épargne de la sauvegarde est illisible." };
+    }
+  }
   const settings = isObject(raw.settings) ? raw.settings : {};
   const expenses = Array.isArray(settings.expenses)
     ? settings.expenses.filter((e): e is Expense => isObject(e) && typeof e.id === "string" && typeof e.label === "string" && typeof e.monthly === "number" && e.monthly >= 0)
@@ -161,7 +169,7 @@ export function readBackup(raw: unknown): { ok: true; backup: Backup } | { ok: f
       app: "atlas",
       version: 1,
       exportedAt: typeof raw.exportedAt === "string" ? raw.exportedAt : new Date(0).toISOString(),
-      portfolio: portfolio as unknown as UserPortfolio,
+      portfolio: { ...(portfolio as unknown as UserPortfolio), plans: plans as unknown as SavingsPlan[] },
       settings: { expenses, expectedReturn },
     },
   };
@@ -217,8 +225,8 @@ export function instrumentFrom(listing: ListingInfo, currency: string, profile: 
 }
 
 /** Quantité détenue d'une ligne à une date (pour vérifier une vente). */
-export function heldQuantity(portfolio: UserPortfolio, instrumentId: string, upTo: string): number {
-  return portfolio.transactions
+export function heldQuantity(transactions: Transaction[], instrumentId: string, upTo: string): number {
+  return transactions
     .filter((t) => t.instrumentId === instrumentId && t.date <= upTo)
     .reduce((q, t) => q + (t.side === "buy" ? t.quantity : -t.quantity), 0);
 }

@@ -108,3 +108,23 @@ export interface Expense {
   /** Montant mensuel en euros. */
   monthly: number;
 }
+
+/**
+ * Plan d'épargne : un montant fixe en euros investi chaque mois à un jour donné
+ * (Trade Republic exécute le 2 ou le 16, ou le jour ouvré suivant).
+ */
+export interface SavingsPlan {
+  id: string;
+  instrumentId: string;
+  /** Montant brut prélevé chaque mois, en euros. */
+  amountEUR: number;
+  /** Jour du mois visé (1 à 28). */
+  dayOfMonth: number;
+  /** Premier mois d'exécution (AAAA-MM-JJ, le jour est ignoré au profit de dayOfMonth). */
+  start: string;
+  /** Dernier mois inclus, si le plan est arrêté. */
+  end?: string;
+  /** Frais par exécution, en euros (souvent 0). */
+  fees?: number;
+  broker?: string;
+}

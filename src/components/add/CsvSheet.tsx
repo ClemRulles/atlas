@@ -8,7 +8,8 @@ import type { Instrument, Transaction } from "@/lib/domain/types";
 import { fetchHistory, fetchProfile, searchInstruments, type SearchResult } from "@/lib/market-client";
 import { useAtlas } from "@/lib/store";
 import { haptic } from "@/lib/ui";
-import { instrumentFrom, newId } from "@/lib/user-data";
+import { buyFromEuros, quoteAt, sellFromEuros, type Quotes } from "@/lib/entry";
+import { fxKey, instrumentFrom, newId } from "@/lib/user-data";
 
 const FIELD_LABELS = { date: "date", quantity: "quantité", price: "prix", isin: "ISIN ou ticker" } as const;
 
@@ -82,41 +83,40 @@ export function CsvSheet() {
     setError(null);
     const instruments: Instrument[] = [];
     const transactions: Transaction[] = [];
-    const byKey = new Map<string, Instrument | null>();
+    const byKey = new Map<string, { instrument: Instrument; quotes: Quotes } | null>();
     try {
       for (const key of new Set(ready.map(keyOf))) {
         const res = resolutions[key];
         const listing = res.options.find((o) => o.symbol === res.chosen);
         if (!listing) continue;
-        const existing = portfolio.instruments[listing.symbol];
-        if (existing) {
-          byKey.set(key, existing);
-          continue;
-        }
         const first = ready.filter((r) => keyOf(r) === key).map((r) => r.date as string).sort()[0];
-        const history = await fetchHistory(listing.symbol, first).catch(() => null);
-        if (!history?.currency) {
+        const from = new Date(Date.parse(first) - 10 * 86_400_000).toISOString().slice(0, 10);
+        const history = await fetchHistory(listing.symbol, from).catch(() => null);
+        const existing = portfolio.instruments[listing.symbol];
+        const currency = existing?.currency ?? history?.currency;
+        if (!history || !currency) {
           byKey.set(key, null);
           continue;
         }
-        const profile = await fetchProfile(listing.symbol);
-        const instrument = instrumentFrom({ ...listing, isin: listing.isin ?? (key.length === 12 ? key : undefined) }, history.currency, profile);
-        instruments.push(instrument);
-        byKey.set(key, instrument);
+        const fx = currency === "EUR" ? [] : ((await fetchHistory(fxKey(currency), from).catch(() => null))?.points ?? []);
+        const instrument = existing ?? instrumentFrom({ ...listing, isin: listing.isin ?? (key.length === 12 ? key : undefined) }, currency, await fetchProfile(listing.symbol));
+        if (!existing) instruments.push(instrument);
+        byKey.set(key, { instrument, quotes: { currency, points: history.points, fx } });
       }
       for (const row of ready) {
-        const instrument = byKey.get(keyOf(row));
-        if (!instrument) continue;
-        transactions.push({
-          id: newId(),
-          instrumentId: instrument.id,
-          side: row.side,
-          date: row.date as string,
-          quantity: row.quantity as number,
-          price: row.price as number,
-          ...(row.fees ? { fees: row.fees } : {}),
-          ...(row.broker ? { broker: row.broker } : {}),
-        });
+        const found = byKey.get(keyOf(row));
+        if (!found) continue;
+        const { instrument, quotes } = found;
+        const base = { id: newId(), instrumentId: instrument.id, date: row.date as string, ...(row.broker ? { broker: row.broker } : {}) };
+        // Les montants sont en euros ; un prix unitaire aussi, sauf si une colonne Devise indique la devise du titre.
+        const priceInEUR = row.price !== null && (row.currency === null || row.currency === "EUR" || row.currency !== instrument.currency);
+        const totalEUR =
+          row.amount ?? (row.price !== null && row.quantity ? (priceInEUR ? row.price * row.quantity : (row.price * row.quantity) / (quoteAt(quotes, base.date)?.fx ?? 1)) : null);
+        const t =
+          row.side === "buy"
+            ? buyFromEuros(quotes, { ...base, paidEUR: (totalEUR ?? 0) + (row.amount === null ? (row.fees ?? 0) : 0), feesEUR: row.fees ?? 0, quantity: row.quantity ?? undefined })
+            : sellFromEuros(quotes, { ...base, quantity: row.quantity ?? 0, receivedEUR: totalEUR === null ? undefined : totalEUR - (row.fees ?? 0), feesEUR: row.fees ?? 0 });
+        if (t) transactions.push(t);
       }
       const skipped = ready.length - transactions.length;
       if (transactions.length === 0) {
@@ -137,7 +137,7 @@ export function CsvSheet() {
       <div className="flex flex-col gap-5">
         <div>
           <h2 className="font-serif text-[28px] leading-tight">Importer un CSV</h2>
-          <p className="mt-2 text-[14.5px] text-brume">L&apos;export de transactions de ton courtier. Il faut au moins une date, un ISIN ou un ticker, une quantité et un prix. Le fichier reste sur ton téléphone.</p>
+          <p className="mt-2 text-[14.5px] text-brume">L&apos;export de transactions de ton courtier. Le plus simple : une date, un ISIN et le montant investi en euros (Date;ISIN;Montant). L&apos;app retrouve le cours du jour et calcule les parts. Une quantité et un prix fonctionnent aussi. Le fichier reste sur ton téléphone.</p>
         </div>
 
         {!parsed && (
@@ -149,7 +149,7 @@ export function CsvSheet() {
             </label>
             <details className="text-[14px] text-brume">
               <summary className="cursor-pointer">Ou coller le contenu</summary>
-              <textarea id="csv-texte" rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Date;ISIN;Quantité;Cours;Frais\n05/03/2024;IE00B4L5Y983;10;85,12;2"} className={`${inputClass} mt-3 font-mono text-[13px]`} />
+              <textarea id="csv-texte" rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Date;ISIN;Montant\n02/03/2025;IE00B4L5Y983;200"} className={`${inputClass} mt-3 font-mono text-[13px]`} />
               <button type="button" onClick={() => analyse(text)} disabled={!text.trim()} className="touche mt-3 rounded-full bg-white/10 px-5 py-2.5 text-[14px] text-craie disabled:opacity-40">
                 Lire
               </button>

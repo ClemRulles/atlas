@@ -30,8 +30,10 @@ const TOOLS: { id: ToolId; label: string }[] = [
 ];
 
 export function LabView() {
-  const { snapshot, mode, data } = useAtlas();
+  const { snapshot, mode, data, portfolio } = useAtlas();
   const [tool, setTool] = useState<ToolId>("futur");
+  // Les plans d'épargne en cours donnent le versement mensuel de départ du simulateur.
+  const plansMonthly = mode === "real" ? (portfolio.plans ?? []).filter((p) => !p.end || p.end >= (snapshot?.today ?? "")).reduce((s, p) => s + p.amountEUR, 0) : 0;
   if (!snapshot || !data) return <PageSkeleton />;
   if (mode === "real" && snapshot.lines.length === 0) return <EmptyPortfolio question="Et si… ?" />;
 
@@ -64,7 +66,7 @@ export function LabView() {
       </Reveal>
       <AnimatePresence mode="wait">
         <motion.div key={tool} initial={{ opacity: 0, y: 14, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
-          {tool === "futur" && <FutureTool snapshot={snapshot} expectedReturn={data.expectedReturn} />}
+          {tool === "futur" && <FutureTool snapshot={snapshot} expectedReturn={data.expectedReturn} plansMonthly={plansMonthly} />}
           {tool === "crises" && <CrisesTool snapshot={snapshot} />}
           {tool === "jumeau" && <TwinTool snapshot={snapshot} data={data} />}
           {tool === "avant" && <BeforeBuyTool snapshot={snapshot} data={data} />}
@@ -86,8 +88,8 @@ function Note({ children }: { children: React.ReactNode }) {
 
 /* ——— Le futur ——— */
 
-function FutureTool({ snapshot, expectedReturn }: { snapshot: Snapshot; expectedReturn: number }) {
-  const [monthly, setMonthly] = useState(500);
+function FutureTool({ snapshot, expectedReturn, plansMonthly }: { snapshot: Snapshot; expectedReturn: number; plansMonthly: number }) {
+  const [monthly, setMonthly] = useState(plansMonthly > 0 ? Math.round(plansMonthly / 50) * 50 || 50 : 500);
   const [years, setYears] = useState(15);
   const [profileId, setProfileId] = useState<(typeof PROFILES)[number]["id"]>("equilibre");
   const profile = PROFILES.find((p) => p.id === profileId)!;
@@ -125,13 +127,13 @@ function FutureTool({ snapshot, expectedReturn }: { snapshot: Snapshot; expected
         <ul className="flex flex-col gap-1.5">
           {reached.map((m) => (
             <li key={m.capital} className="text-[14.5px]">
-              <span className="font-medium tabular">{thisYear + (m.year as number)}</span> : tes placements couvrent aussi « {m.label} », avec un rendement de {formatPct(expectedReturn, { decimals: 1 })} par an.
+              <span className="font-medium tabular">{thisYear + (m.year as number)}</span> : avec {formatPct(expectedReturn, { decimals: 1 })} par an, ton patrimoine paierait aussi « {m.label} » chaque mois.
             </li>
           ))}
         </ul>
       )}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label={`Versement : ${formatEUR(monthly)} par mois`}>
+        <Field label={`Versement : ${formatEUR(monthly)} par mois`} hint={plansMonthly > 0 ? `Tes plans d'épargne : ${formatEUR(plansMonthly)} par mois` : undefined}>
           <input id="futur-versement" type="range" min={0} max={3000} step={50} value={monthly} onChange={(e) => setMonthly(Number(e.target.value))} className="w-full accent-white" />
         </Field>
         <Field label={`Horizon : ${years} ans`}>
@@ -249,7 +251,8 @@ function TwinTool({ snapshot, data }: { snapshot: Snapshot; data: PortfolioData 
       return;
     }
     let alive = true;
-    fetchHistory(WORLD_ETF.symbol, first)
+    // Dix jours de marge : un premier achat daté d'un week-end prend la clôture de la veille.
+    fetchHistory(WORLD_ETF.symbol, new Date(Date.parse(first) - 10 * 86_400_000).toISOString().slice(0, 10))
       .then((h) => alive && setReference(h.points))
       .catch(() => alive && setFailed(true));
     return () => {
@@ -269,6 +272,8 @@ function TwinTool({ snapshot, data }: { snapshot: Snapshot; data: PortfolioData 
     <Card className="flex flex-col gap-5">
       {failed ? (
         <p className="text-[14px] text-braise">Cours de l&apos;ETF monde indisponible pour le moment.</p>
+      ) : twin && twin.twinEUR === 0 && twin.skipped > 0 ? (
+        <p className="text-[14px] text-braise">Impossible de rejouer tes achats : cours de l&apos;ETF monde manquants à leurs dates.</p>
       ) : !twin ? (
         <div className="flex flex-col gap-3">
           <div className="silhouette h-16" />

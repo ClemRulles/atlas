@@ -179,3 +179,13 @@ describe("places boursières", () => {
     expect(isOpen(brussels, new Date("2026-11-17T16:30:00Z"))).toBe(false); // 17 h 30 à Bruxelles
   });
 });
+
+describe("carte du monde", () => {
+  it("sait placer chaque pays connu de la traduction", async () => {
+    const { COUNTRY_LOCATIONS } = await import("./exchanges");
+    const { countryFr } = await import("@/lib/market-format");
+    for (const en of ["United States", "Spain", "Italy", "Sweden", "Ireland", "Hong Kong", "Singapore", "Israel", "Austria", "Bermuda"]) {
+      expect(COUNTRY_LOCATIONS[countryFr(en) as string], en).toBeDefined();
+    }
+  });
+});
