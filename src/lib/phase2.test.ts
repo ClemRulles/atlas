@@ -3,7 +3,7 @@ import { parseCsv, parseDate, parseNumber, parseSide, splitLine } from "./csv";
 import { analyze } from "./analysis";
 import { assetTypeOf, cleanCloses, displayName, exchangeDate, exchangeRank, isValidIsin, normalizeCurrency } from "./market-format";
 import { elide } from "./domain/sentence";
-import { companiesToQuote, companyQuotesFrom, compositionsFrom, compositionsNeeded, heldQuantity, instrumentFrom, withCompanyFx } from "./user-data";
+import { companiesToQuote, companyQuotesFrom, compositionsFrom, compositionsNeeded, heldQuantity, instrumentFrom, mergePortfolios, samePortfolio, withCompanyFx } from "./user-data";
 import { DEFAULT_SETTINGS, fxKey, makeBackup, marketFrom, oldestFetch, readBackup, seriesNeeded, staleSeries, type UserPortfolio } from "./user-data";
 
 const portfolio: UserPortfolio = {
@@ -231,5 +231,34 @@ describe("compositions et cours des entreprises", () => {
     const quotes = companyQuotesFrom(targets, cache);
     expect(quotes).toEqual({ "name:apple": { currency: "USD", points: cache.AAPL.points } });
     expect(withCompanyFx({ prices: {}, fx: {} }, quotes, cache).fx.USD).toEqual(cache["EURUSD=X"].points);
+  });
+});
+
+describe("fusion entre appareils", () => {
+  const vwce = { id: "VWCE.DE", symbol: "VWCE.DE", name: "Vanguard FTSE All-World", type: "etf" as const, currency: "EUR" };
+  const plan = { id: "p1", instrumentId: "VWCE.DE", amountEUR: 1700, dayOfMonth: 2, start: "2026-12-01" };
+  const phone: UserPortfolio = { instruments: { ...portfolio.instruments, "VWCE.DE": vwce }, transactions: portfolio.transactions, plans: [plan] };
+  const computer: UserPortfolio = { instruments: portfolio.instruments, transactions: [...portfolio.transactions, { id: "d", instrumentId: "NVDA", side: "buy", date: "2026-11-20", quantity: 1, price: 150 }], plans: [] };
+
+  it("ne perd pas un plan créé sur un autre appareil", () => {
+    const merged = mergePortfolios(computer, phone);
+    expect(merged.plans).toEqual([plan]);
+    expect(merged.transactions.map((t) => t.id).sort()).toEqual(["a", "b", "c", "d"]);
+    expect(merged.instruments["VWCE.DE"]).toEqual(vwce);
+  });
+
+  it("respecte une suppression volontaire, d'où qu'elle vienne", () => {
+    const withoutPlan: UserPortfolio = { ...phone, plans: [], deleted: ["p1", "a"] };
+    const merged = mergePortfolios(computer, withoutPlan);
+    expect(merged.plans).toEqual([]);
+    expect(merged.transactions.map((t) => t.id).sort()).toEqual(["b", "c", "d"]);
+    expect(merged.instruments["VWCE.DE"]).toBeUndefined();
+  });
+
+  it("garde la version préférée d'un plan modifié des deux côtés", () => {
+    const merged = mergePortfolios({ ...phone, plans: [{ ...plan, amountEUR: 2000 }] }, phone);
+    expect(merged.plans?.[0].amountEUR).toBe(2000);
+    expect(samePortfolio(merged, phone)).toBe(false);
+    expect(samePortfolio(mergePortfolios(phone, phone), phone)).toBe(true);
   });
 });

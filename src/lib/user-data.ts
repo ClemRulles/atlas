@@ -12,6 +12,8 @@ export interface UserPortfolio {
   transactions: Transaction[];
   /** Plans d'épargne : leurs achats sont recalculés à partir des cours, jamais stockés. */
   plans?: SavingsPlan[];
+  /** Identifiants supprimés volontairement (transactions et plans), pour que la fusion entre appareils ne les ressuscite pas. */
+  deleted?: string[];
 }
 
 export interface Settings {
@@ -289,4 +291,37 @@ export function withCompanyFx(market: MarketData, quotes: CompanyQuotes, cache: 
     if (rate) fx[q.currency] = rate.points;
   }
   return { ...market, fx };
+}
+
+
+/* ——— Fusion entre appareils ——— */
+
+/**
+ * Réunit deux versions d'un portefeuille (cet appareil et le compte) sans rien perdre :
+ * transactions et plans sont réunis par identifiant, les suppressions volontaires sont respectées,
+ * et pour un même identifiant la version de `preferred` gagne (modification la plus récente).
+ */
+export function mergePortfolios(preferred: UserPortfolio, other: UserPortfolio): UserPortfolio {
+  const deleted = [...new Set([...(preferred.deleted ?? []), ...(other.deleted ?? [])])];
+  const gone = new Set(deleted);
+  const byId = <T extends { id: string }>(a: T[] = [], b: T[] = []) => {
+    const map = new Map<string, T>();
+    for (const x of b) if (!gone.has(x.id)) map.set(x.id, x);
+    for (const x of a) if (!gone.has(x.id)) map.set(x.id, x);
+    return [...map.values()];
+  };
+  const transactions = byId(preferred.transactions, other.transactions).sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0));
+  const plans = byId(preferred.plans, other.plans);
+  const used = new Set([...transactions.map((t) => t.instrumentId), ...plans.map((p) => p.instrumentId)]);
+  const instruments = Object.fromEntries(
+    Object.entries({ ...other.instruments, ...preferred.instruments }).filter(([id]) => used.has(id)),
+  );
+  return { instruments, transactions, plans, deleted };
+}
+
+/** Vrai si deux portefeuilles contiennent les mêmes transactions, plans et suppressions. */
+export function samePortfolio(a: UserPortfolio, b: UserPortfolio): boolean {
+  const key = (p: UserPortfolio) =>
+    JSON.stringify([p.transactions.map((t) => t.id).sort(), (p.plans ?? []).map((x) => `${x.id}:${x.amountEUR}:${x.start}:${x.end ?? ""}:${x.dayOfMonth}`).sort(), [...(p.deleted ?? [])].sort()]);
+  return key(a) === key(b);
 }

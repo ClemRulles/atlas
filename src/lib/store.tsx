@@ -16,6 +16,8 @@ import {
   EMPTY_PORTFOLIO,
   fxKey,
   marketFrom,
+  mergePortfolios,
+  samePortfolio,
   withCompanyFx,
   type CompositionCache,
   oldestFetch,
@@ -135,24 +137,37 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
       if (savedCompositions) setCompositionCache(savedCompositions);
       // Compte connecté : les données du serveur passent devant celles de l'appareil si elles sont plus récentes.
       const me = await fetch("/api/auth/me").then((r) => r.json()).catch(() => null);
+      let portfolioNow: UserPortfolio = savedPortfolio ?? EMPTY_PORTFOLIO;
+      let settingsNow: Settings = savedSettings ?? DEFAULT_SETTINGS;
       let fromServer = false;
       if (me?.sync) {
+        // Compte connecté : on fusionne l'appareil et le compte, sans jamais rien perdre de part et d'autre.
         const remote = await fetch("/api/data").then((r) => (r.ok ? r.json() : null)).catch(() => null);
-        const localStamp = (await dbGet<number>("updatedAt")) ?? 0;
-        const doc = remote?.data as { portfolio?: UserPortfolio; settings?: Settings; updatedAt?: number } | null;
-        if (doc?.portfolio && (doc.updatedAt ?? 0) > localStamp) {
-          setPortfolio(doc.portfolio);
-          if (doc.settings) setSettings(doc.settings);
-          void dbSet("portfolio", doc.portfolio);
-          if (doc.settings) void dbSet("settings", doc.settings);
-          void dbSet("updatedAt", doc.updatedAt ?? Date.now());
-          fromServer = doc.portfolio.transactions.length > 0 || (doc.portfolio.plans?.length ?? 0) > 0;
+        if (remote) {
+          const localStamp = (await dbGet<number>("updatedAt")) ?? 0;
+          const doc = remote.data as { portfolio?: UserPortfolio; settings?: Settings; updatedAt?: number } | null;
+          let needPush = true;
+          if (doc?.portfolio) {
+            const remoteNewer = (doc.updatedAt ?? 0) > localStamp;
+            const merged = remoteNewer ? mergePortfolios(doc.portfolio, portfolioNow) : mergePortfolios(portfolioNow, doc.portfolio);
+            if (remoteNewer && doc.settings) settingsNow = doc.settings;
+            needPush = !samePortfolio(merged, doc.portfolio) || (!remoteNewer && JSON.stringify(settingsNow) !== JSON.stringify(doc.settings));
+            portfolioNow = merged;
+          }
+          fromServer = portfolioNow.transactions.length > 0 || (portfolioNow.plans?.length ?? 0) > 0;
+          void dbSet("portfolio", portfolioNow);
+          void dbSet("settings", settingsNow);
+          if (needPush) {
+            const updatedAt = Date.now();
+            void dbSet("updatedAt", updatedAt);
+            void fetch("/api/data", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ portfolio: portfolioNow, settings: settingsNow, updatedAt }) }).catch(() => {});
+          }
         }
       }
       if (!alive) return;
       setAccount(me ? { enabled: !!me.enabled, user: me.user ?? null, sync: !!me.sync, status: "idle" } : null);
-      if (savedPortfolio) setPortfolio(savedPortfolio);
-      if (savedSettings) setSettings(savedSettings);
+      setPortfolio(portfolioNow);
+      setSettings(settingsNow);
       if (savedCache) setCache(savedCache);
       setToday(localToday());
       setModeState(fromServer || read(MODE_KEY) === "real" ? "real" : "demo");
@@ -180,10 +195,15 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
       const updatedAt = Date.now();
       void dbSet("updatedAt", updatedAt);
       setAccount((a) => (a ? { ...a, status: "saving" } : a));
-      const ok = await fetch("/api/data", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ portfolio, settings, updatedAt }) })
-        .then((r) => r.ok)
-        .catch(() => false);
-      setAccount((a) => (a ? { ...a, status: ok ? "saved" : "error" } : a));
+      const result = await fetch("/api/data", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ portfolio, settings, updatedAt }) })
+        .then((r) => (r.ok ? (r.json() as Promise<{ portfolio?: UserPortfolio }>) : null))
+        .catch(() => null);
+      setAccount((a) => (a ? { ...a, status: result ? "saved" : "error" } : a));
+      // Le serveur a pu fusionner des ajouts faits ailleurs : on les récupère.
+      if (result?.portfolio && !samePortfolio(result.portfolio, portfolio)) {
+        setPortfolio(result.portfolio);
+        void dbSet("portfolio", result.portfolio);
+      }
     }, 1200);
     return () => clearTimeout(timer);
   }, [loaded, account?.sync, portfolio, settings]);
@@ -322,6 +342,7 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
       const used = new Set([...changed.transactions.map((t) => t.instrumentId), ...(changed.plans ?? []).map((p) => p.instrumentId)]);
       const next = { ...changed, instruments: Object.fromEntries(Object.entries(changed.instruments).filter(([key]) => used.has(key))) };
       void dbSet("portfolio", next);
+      void dbSet("updatedAt", Date.now());
       return next;
     });
   }, []);
@@ -336,7 +357,10 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
     },
     [setMode, updatePortfolio],
   );
-  const deleteTransaction = useCallback((id: string) => updatePortfolio((current) => ({ ...current, transactions: current.transactions.filter((t) => t.id !== id) })), [updatePortfolio]);
+  const deleteTransaction = useCallback(
+    (id: string) => updatePortfolio((current) => ({ ...current, transactions: current.transactions.filter((t) => t.id !== id), deleted: [...(current.deleted ?? []), id] })),
+    [updatePortfolio],
+  );
   const savePlan = useCallback(
     (instrument: Instrument, plan: SavingsPlan) => {
       updatePortfolio((current) => ({
@@ -348,10 +372,14 @@ export function AtlasProvider({ children }: { children: ReactNode }) {
     },
     [setMode, updatePortfolio],
   );
-  const deletePlan = useCallback((id: string) => updatePortfolio((current) => ({ ...current, plans: (current.plans ?? []).filter((p) => p.id !== id) })), [updatePortfolio]);
+  const deletePlan = useCallback(
+    (id: string) => updatePortfolio((current) => ({ ...current, plans: (current.plans ?? []).filter((p) => p.id !== id), deleted: [...(current.deleted ?? []), id] })),
+    [updatePortfolio],
+  );
   const saveSettings = useCallback((next: Settings) => {
     setSettings(next);
     void dbSet("settings", next);
+    void dbSet("updatedAt", Date.now());
   }, []);
   const restore = useCallback(
     (backup: Backup) => {
