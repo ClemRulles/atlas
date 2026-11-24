@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { overlap } from "@/lib/domain/lookthrough";
 import type { Compositions, FundComposition, Instrument, MarketData } from "@/lib/domain/types";
-import { applyShock, benchmarkFor, blendIndices, CRISES, lazyTwin, PROFILES, replayCrisis, simulate, whatIfBuy } from "./lab";
+import { applyShock, benchmarkFor, blendIndices, CRISES, lazyTwin, planSchedule, PROFILES, replayCrisis, simulate, whatIfBuy } from "./lab";
 
 const instruments: Record<string, Instrument> = {
   A: { id: "A", symbol: "A", name: "MSCI World", type: "etf", currency: "EUR" },
@@ -35,6 +35,19 @@ describe("simulateur du futur", () => {
     expect(sim.milestones[0].year).toBeGreaterThan(5);
     expect(sim.milestones[0].year).toBeLessThan(15);
     expect(sim.milestones[1].year).toBeNull();
+  });
+
+  it("suit le calendrier réel des plans : début futur, fin, effort en plus", () => {
+    const plans = [
+      { amountEUR: 200, start: "2025-01-01" },
+      { amountEUR: 100, start: "2026-12-01" }, // commence le mois prochain
+      { amountEUR: 50, start: "2024-01-01", end: "2027-01-28" }, // s'arrête après janvier 2027
+    ];
+    const s = planSchedule(plans, "2026-11-24", 4, 10);
+    expect(s).toEqual([360, 360, 310, 310]); // déc., janv., févr., mars
+    expect(planSchedule(plans, "2026-11-24", 2, -1000)).toEqual([0, 0]);
+    const sim = simulate({ start: 1000, monthly: 0, years: 1, profile: PROFILES[0], paths: 50, schedule: planSchedule(plans, "2026-11-24", 12) });
+    expect(sim.points[1].invested).toBe(1000 + 350 * 2 + 300 * 10);
   });
 
   it("est déterministe pour une même graine", () => {

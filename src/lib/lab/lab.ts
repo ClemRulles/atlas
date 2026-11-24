@@ -68,8 +68,16 @@ export function simulate(opts: {
   paths?: number;
   seed?: number;
   thresholds?: number[];
+  /** Versement de chaque mois à venir (index 0 = mois prochain) ; à défaut, `monthly` chaque mois. */
+  schedule?: number[];
 }): Simulation {
-  const { start, monthly, years, profile, paths = 2000, seed = 42, thresholds = [] } = opts;
+  const { start, monthly, years, profile, paths = 2000, seed = 42, thresholds = [], schedule } = opts;
+  const deposit = (m: number) => schedule?.[m - 1] ?? monthly;
+  const investedAt: number[] = [start];
+  for (let m = 1, total = start; m <= years * 12; m++) {
+    total += deposit(m);
+    if (m % 12 === 0) investedAt.push(total);
+  }
   const random = rng(seed);
   const mu = Math.log(1 + profile.annualReturn) / 12;
   const sigma = profile.volatility / Math.sqrt(12);
@@ -78,19 +86,39 @@ export function simulate(opts: {
     let value = start;
     byYear[0].push(value);
     for (let m = 1; m <= years * 12; m++) {
-      value = value * Math.exp(mu + sigma * normal(random)) + monthly;
+      value = value * Math.exp(mu + sigma * normal(random)) + deposit(m);
       if (m % 12 === 0) byYear[m / 12].push(value);
     }
   }
   const pick = (sorted: number[], q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
   const points = byYear.map((values, year) => {
     const sorted = [...values].sort((a, b) => a - b);
-    return { year, p10: pick(sorted, 0.1), p50: pick(sorted, 0.5), p90: pick(sorted, 0.9), invested: start + monthly * 12 * year };
+    return { year, p10: pick(sorted, 0.1), p50: pick(sorted, 0.5), p90: pick(sorted, 0.9), invested: investedAt[year] };
   });
   return {
     points,
     milestones: thresholds.map((capital) => ({ capital, year: points.find((pt) => pt.p50 >= capital)?.year ?? null })),
   };
+}
+
+/**
+ * Calendrier des versements à venir d'après les plans d'épargne : chaque plan compte à partir de son
+ * premier mois et jusqu'à son dernier mois s'il en a un. `extra` s'ajoute (ou se retire) chaque mois.
+ */
+export function planSchedule(
+  plans: { amountEUR: number; start: string; end?: string }[],
+  today: string,
+  months: number,
+  extra = 0,
+): number[] {
+  const base = new Date(`${today.slice(0, 7)}-01T12:00:00Z`);
+  return Array.from({ length: months }, (_, i) => {
+    const d = new Date(base);
+    d.setUTCMonth(d.getUTCMonth() + i + 1);
+    const ym = d.toISOString().slice(0, 7);
+    const fromPlans = plans.filter((p) => p.start.slice(0, 7) <= ym && (!p.end || p.end.slice(0, 7) >= ym)).reduce((sum, p) => sum + p.amountEUR, 0);
+    return Math.max(0, fromPlans + extra);
+  });
 }
 
 /* ——— 2. Le jumeau paresseux ——— */

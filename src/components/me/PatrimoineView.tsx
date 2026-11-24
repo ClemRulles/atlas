@@ -75,7 +75,7 @@ export function PatrimoineView() {
                     </div>
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-[12.5px] text-brume">
                       <span>
-                        <Money value={p.amountEUR} /> le {p.dayOfMonth} de chaque mois, depuis {monthYear(p.start)}
+                        <Money value={p.amountEUR} /> le {p.dayOfMonth} de chaque mois, {p.start.slice(0, 7) > today.slice(0, 7) || (p.start.slice(0, 7) === today.slice(0, 7) && p.dayOfMonth > Number(today.slice(8, 10))) ? "à partir de" : "depuis"} {monthYear(p.start)}
                         {p.end ? `, arrêté en ${monthYear(p.end)}` : ""}
                         {p.broker ? ` · ${p.broker}` : ""}
                       </span>

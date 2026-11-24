@@ -9,9 +9,9 @@ import { Card, Money, Pct, Reveal } from "@/components/ui/primitives";
 import { convictions, type PortfolioData, type Snapshot } from "@/lib/analysis";
 import { parseNumber } from "@/lib/csv";
 import { overlap, type Axis } from "@/lib/domain/lookthrough";
-import type { FundComposition, Instrument, PriceHistory } from "@/lib/domain/types";
+import type { FundComposition, Instrument, PriceHistory, SavingsPlan } from "@/lib/domain/types";
 import { formatEUR, formatPct } from "@/lib/format";
-import { applyShock, benchmarkFor, blendIndices, CRISES, lazyTwin, PROFILES, replayCrisis, simulate, whatIfBuy, WORLD_PARTS, type Crisis } from "@/lib/lab/lab";
+import { applyShock, benchmarkFor, blendIndices, CRISES, lazyTwin, planSchedule, PROFILES, replayCrisis, simulate, whatIfBuy, WORLD_PARTS, type Crisis } from "@/lib/lab/lab";
 import { fetchComposition, fetchHistory, fetchProfile, searchInstruments, type SearchResult } from "@/lib/market-client";
 import { useAtlas } from "@/lib/store";
 import { haptic } from "@/lib/ui";
@@ -32,8 +32,8 @@ const TOOLS: { id: ToolId; label: string }[] = [
 export function LabView() {
   const { snapshot, mode, data, portfolio } = useAtlas();
   const [tool, setTool] = useState<ToolId>("futur");
-  // Les plans d'épargne en cours donnent le versement mensuel de départ du simulateur.
-  const plansMonthly = mode === "real" ? (portfolio.plans ?? []).filter((p) => !p.end || p.end >= (snapshot?.today ?? "")).reduce((s, p) => s + p.amountEUR, 0) : 0;
+  // Les plans d'épargne en cours ou à venir donnent le calendrier des versements du simulateur.
+  const plans = mode === "real" ? (portfolio.plans ?? []).filter((p) => !p.end || p.end >= (snapshot?.today ?? "")) : [];
   if (!snapshot || !data) return <PageSkeleton />;
   if (mode === "real" && snapshot.lines.length === 0) return <EmptyPortfolio question="Et si… ?" />;
 
@@ -66,7 +66,7 @@ export function LabView() {
       </Reveal>
       <AnimatePresence mode="wait">
         <motion.div key={tool} initial={{ opacity: 0, y: 14, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
-          {tool === "futur" && <FutureTool snapshot={snapshot} expectedReturn={data.expectedReturn} plansMonthly={plansMonthly} />}
+          {tool === "futur" && <FutureTool snapshot={snapshot} expectedReturn={data.expectedReturn} plans={plans} instruments={data.instruments} />}
           {tool === "crises" && <CrisesTool snapshot={snapshot} />}
           {tool === "jumeau" && <TwinTool snapshot={snapshot} data={data} />}
           {tool === "avant" && <BeforeBuyTool snapshot={snapshot} data={data} />}
@@ -88,7 +88,9 @@ function Note({ children }: { children: React.ReactNode }) {
 
 /* ——— Le futur ——— */
 
-function FutureTool({ snapshot, expectedReturn, plansMonthly }: { snapshot: Snapshot; expectedReturn: number; plansMonthly: number }) {
+function FutureTool({ snapshot, expectedReturn, plans, instruments }: { snapshot: Snapshot; expectedReturn: number; plans: SavingsPlan[]; instruments: Record<string, Instrument> }) {
+  // Montant mensuel de tes plans : le plus haut des douze prochains mois (un plan qui démarre le mois prochain compte).
+  const plansMonthly = Math.max(0, ...planSchedule(plans, snapshot.today, 12));
   // Point de départ : ce que tu possèdes aujourd'hui et tes plans d'épargne en cours, au centime près.
   // Le curseur ajoute (ou retire) un effort par-dessus tes plans.
   const hasPlans = plansMonthly > 0;
@@ -102,9 +104,20 @@ function FutureTool({ snapshot, expectedReturn, plansMonthly }: { snapshot: Snap
   // Paliers : le capital à partir duquel le rendement attendu paie chaque dépense (cumulée).
   const thresholdsKey = snapshot.life.slices.map((s) => s.capitalNeededEUR).filter((c): c is number => c !== null).join(",");
   const start = snapshot.totalEUR;
+  const plansKey = plans.map((p) => `${p.amountEUR}:${p.start}:${p.end ?? ""}`).join("|");
   const sim = useMemo(
-    () => simulate({ start, monthly, years, profile, paths: 1500, thresholds: thresholdsKey ? thresholdsKey.split(",").map(Number) : [] }),
-    [start, monthly, years, profile, thresholdsKey],
+    () =>
+      simulate({
+        start,
+        monthly,
+        years,
+        profile,
+        paths: 1500,
+        thresholds: thresholdsKey ? thresholdsKey.split(",").map(Number) : [],
+        // Avec des plans : leur vrai calendrier (début, fin) plus l'effort testé ; sinon un versement fixe.
+        ...(hasPlans ? { schedule: planSchedule(plans, snapshot.today, years * 12, extra) } : {}),
+      }),
+    [start, monthly, years, profile, thresholdsKey, hasPlans, plansKey, extra, snapshot.today], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const last = sim.points[sim.points.length - 1];
   const reached = sim.milestones.map((m, i) => ({ ...m, label: snapshot.life.slices[i]?.expense.label })).filter((m) => m.year !== null && m.year > 0);
@@ -115,7 +128,7 @@ function FutureTool({ snapshot, expectedReturn, plansMonthly }: { snapshot: Snap
         Départ : ce que tu possèdes aujourd&apos;hui, <Money value={start} />
         {hasPlans ? (
           <>
-            , et tes plans d&apos;épargne en cours, <Money value={plansMonthly} /> par mois
+            , et tes plans d&apos;épargne ({plans.map((p) => `${instruments[p.instrumentId]?.name ?? "plan"} ${formatEUR(p.amountEUR)}${p.start.slice(0, 7) > snapshot.today.slice(0, 7) ? ` dès ${new Intl.DateTimeFormat("fr-BE", { month: "long", timeZone: "UTC" }).format(new Date(`${p.start.slice(0, 7)}-15T12:00:00Z`))}` : ""}`).join(", ")}), soit <Money value={plansMonthly} /> par mois
             {extra !== 0 && (
               <>
                 {" "}

@@ -23,6 +23,14 @@ const KINDS: { value: EntryKind; label: string; hint: string }[] = [
 ];
 
 const monthInput = (date: string) => date.slice(0, 7);
+/** Même jour, `n` mois plus tard (AAAA-MM-JJ, jour ramené à 28 au plus). */
+const monthAhead = (date: string, n: number) => {
+  const d = new Date(`${date.slice(0, 7)}-01T12:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + n);
+  return `${d.toISOString().slice(0, 7)}-28`;
+};
+const firstExecution = (plan: SavingsPlan) =>
+  new Intl.DateTimeFormat("fr-BE", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${plan.start.slice(0, 7)}-${String(plan.dayOfMonth).padStart(2, "0")}T12:00:00Z`));
 const minusDays = (date: string, days: number) => new Date(Date.parse(date) - days * 86_400_000).toISOString().slice(0, 10);
 const longDate = (d: string) => new Intl.DateTimeFormat("fr-BE", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${d}T12:00:00Z`));
 
@@ -103,7 +111,7 @@ export function EntryForm({ listing, known, initialKind, onBack }: { listing: Li
     if (!quotes) return "Lecture des cours…";
     if (kind === "plan") {
       if (!a || a <= 0) return "Indique le montant investi chaque mois.";
-      if (`${start}-01` > today) return "Le plan doit avoir commencé.";
+      if (`${start}-01` > monthAhead(today, 12)) return "Le premier versement doit tomber dans les douze prochains mois.";
       return null;
     }
     if (date > today) return "Choisis une date passée ou aujourd'hui.";
@@ -189,8 +197,8 @@ export function EntryForm({ listing, known, initialKind, onBack }: { listing: Li
             <Field label="Jour du mois">
               <TextInput id="plan-jour" inputMode="numeric" value={day} onChange={(e) => setDay(e.target.value)} />
             </Field>
-            <Field label="Depuis">
-              <TextInput id="plan-debut" type="month" value={start} max={monthInput(today)} onChange={(e) => setStart(e.target.value)} />
+            <Field label="Depuis" hint={<button type="button" className="underline" onClick={() => setStart(monthInput(monthAhead(today, 1)))}>Il commence le mois prochain</button>}>
+              <TextInput id="plan-debut" type="month" value={start} max={monthInput(monthAhead(today, 12))} onChange={(e) => setStart(e.target.value)} />
             </Field>
             <Field label="Toujours en cours ?">
               <button type="button" onClick={() => setStopped(!stopped)} className={`${inputClass} text-left`}>
@@ -199,10 +207,15 @@ export function EntryForm({ listing, known, initialKind, onBack }: { listing: Li
             </Field>
             {stopped && (
               <Field label="Dernier mois">
-                <TextInput id="plan-fin" type="month" value={end} min={start} max={monthInput(today)} onChange={(e) => setEnd(e.target.value)} />
+                <TextInput id="plan-fin" type="month" value={end} min={start} onChange={(e) => setEnd(e.target.value)} />
               </Field>
             )}
           </div>
+          {plan && preview && preview.months === 0 && (
+            <p className="rounded-2xl bg-white/[0.04] px-4 py-3 text-[14px] leading-relaxed">
+              Premier versement le {firstExecution(plan)} : {formatEUR(plan.amountEUR)} par mois ensuite. Le plan compte déjà dans le simulateur du futur.
+            </p>
+          )}
           {preview && preview.months > 0 && (
             <p className="rounded-2xl bg-white/[0.04] px-4 py-3 text-[14px] leading-relaxed">
               {preview.months} versements, {formatEUR(preview.paidEUR)} au total, soit environ {formatNumber(preview.parts, { decimals: 2 })} parts
