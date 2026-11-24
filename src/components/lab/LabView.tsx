@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { EmptyPortfolio, PageSkeleton } from "@/components/shell/states";
@@ -120,6 +122,11 @@ function FutureTool({ snapshot, expectedReturn, plans, instruments, mode }: { sn
     [start, monthly, years, profile, thresholdsKey, hasPlans, plansKey, extra, snapshot.today], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const last = sim.points[sim.points.length - 1];
+  // Plans qui s'arrêtent avant l'horizon : on le dit, et le titre donne le versement moyen réel.
+  const horizonEnd = `${thisYear + years}-12`;
+  const ending = plans.filter((p) => p.end && p.end.slice(0, 7) < horizonEnd);
+  const averageMonthly = (last.invested - start) / (years * 12);
+  const monthLong = (d: string) => new Intl.DateTimeFormat("fr-BE", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${d.slice(0, 7)}-15T12:00:00Z`));
   const reached = sim.milestones.map((m, i) => ({ ...m, label: snapshot.life.slices[i]?.expense.label })).filter((m) => m.year !== null && m.year > 0);
 
   return (
@@ -128,7 +135,7 @@ function FutureTool({ snapshot, expectedReturn, plans, instruments, mode }: { sn
         Départ : ce que tu possèdes aujourd&apos;hui, <Money value={start} />
         {hasPlans ? (
           <>
-            , et tes plans d&apos;épargne ({plans.map((p) => `${instruments[p.instrumentId]?.name ?? "plan"} ${formatEUR(p.amountEUR)}${p.start.slice(0, 7) > snapshot.today.slice(0, 7) ? ` dès ${new Intl.DateTimeFormat("fr-BE", { month: "long", timeZone: "UTC" }).format(new Date(`${p.start.slice(0, 7)}-15T12:00:00Z`))}` : ""}`).join(", ")}), soit <Money value={plansMonthly} /> par mois
+            , et tes plans d&apos;épargne ({plans.map((p) => `${instruments[p.instrumentId]?.name ?? "plan"} ${formatEUR(p.amountEUR)}${p.start.slice(0, 7) > snapshot.today.slice(0, 7) ? ` dès ${new Intl.DateTimeFormat("fr-BE", { month: "long", timeZone: "UTC" }).format(new Date(`${p.start.slice(0, 7)}-15T12:00:00Z`))}` : ""}${p.end ? ` jusqu'en ${monthLong(p.end)}` : ""}`).join(", ")}), soit <Money value={plansMonthly} /> par mois
             {extra !== 0 && (
               <>
                 {" "}
@@ -143,8 +150,14 @@ function FutureTool({ snapshot, expectedReturn, plans, instruments, mode }: { sn
           </>
         )}
       </p>
+      {hasPlans && ending.length > 0 && (
+        <p className="-mt-2 text-[13.5px] text-braise/90">
+          {ending.map((p) => `${instruments[p.instrumentId]?.name ?? "Un plan"} s'arrête en ${monthLong(p.end!)}`).join(" ; ")} : après, il n&apos;est plus compté. Si ce n&apos;est pas voulu, remets-le en cours dans{" "}
+          <Link href="/patrimoine" className="underline decoration-current/40 underline-offset-2">Mon patrimoine</Link>.
+        </p>
+      )}
       <Headline>
-        En versant <Money value={monthly} className="font-sans text-[0.85em] font-medium" /> par mois, dans {years} ans, en {thisYear + years}, le scénario médian donne <Money value={last.p50} className="font-sans text-[0.85em] font-medium" />.{" "}
+        En versant {hasPlans && ending.length > 0 ? "en moyenne " : ""}<Money value={hasPlans && ending.length > 0 ? averageMonthly : monthly} className="font-sans text-[0.85em] font-medium" /> par mois, dans {years} ans, en {thisYear + years}, le scénario médian donne <Money value={last.p50} className="font-sans text-[0.85em] font-medium" />.{" "}
         <span className="text-brume">
           Dans 8 cas sur 10, entre <Money value={last.p10} /> et <Money value={last.p90} />.
         </span>

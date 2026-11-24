@@ -92,7 +92,7 @@ export function EntryForm({ listing, known, initialKind, onBack }: { listing: Li
 
   // Aperçu de ce que l'app va enregistrer, calculé avec les vrais cours.
   const plan: SavingsPlan | null =
-    a && a > 0 ? { id: newId("plan"), instrumentId, amountEUR: a, dayOfMonth: Math.min(28, Math.max(1, Number(day) || 2)), start: `${start}-01`, ...(stopped ? { end: `${end}-28` } : {}), ...(f ? { fees: f } : {}), ...(broker.trim() ? { broker: broker.trim() } : {}) } : null;
+    a && a > 0 ? { id: newId("plan"), instrumentId, amountEUR: a, dayOfMonth: Math.min(28, Math.max(1, Number(day) || 2)), start: `${start}-01`, ...(stopped && start <= monthInput(today) ? { end: `${end < start ? start : end}-28` } : {}), ...(f ? { fees: f } : {}), ...(broker.trim() ? { broker: broker.trim() } : {}) } : null;
   const preview = useMemo(() => {
     if (!quotes) return null;
     const instrument: Instrument = known ?? { id: instrumentId, symbol: listing.symbol, name: listing.name, type: listing.type, currency: quotes.currency };
@@ -200,12 +200,12 @@ export function EntryForm({ listing, known, initialKind, onBack }: { listing: Li
             <Field label="Depuis" hint={<button type="button" className="underline" onClick={() => setStart(monthInput(monthAhead(today, 1)))}>Il commence le mois prochain</button>}>
               <TextInput id="plan-debut" type="month" value={start} max={monthInput(monthAhead(today, 12))} onChange={(e) => setStart(e.target.value)} />
             </Field>
-            <Field label="Toujours en cours ?">
+            {start <= monthInput(today) && <Field label="Toujours en cours ?">
               <button type="button" onClick={() => setStopped(!stopped)} className={`${inputClass} text-left`}>
                 {stopped ? "Non, arrêté" : "Oui"}
               </button>
-            </Field>
-            {stopped && (
+            </Field>}
+            {stopped && start <= monthInput(today) && (
               <Field label="Dernier mois">
                 <TextInput id="plan-fin" type="month" value={end} min={start} onChange={(e) => setEnd(e.target.value)} />
               </Field>

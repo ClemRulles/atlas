@@ -17,7 +17,7 @@ const monthYear = (d: string) => new Intl.DateTimeFormat("fr-BE", { month: "long
  * chose change dans l'app. Plans d'épargne, lignes, dépenses, données.
  */
 export function PatrimoineView() {
-  const { snapshot, data, mode, portfolio, openSheet, deletePlan, planPending, settings, account, logout } = useAtlas();
+  const { snapshot, data, mode, portfolio, openSheet, savePlan, deletePlan, planPending, settings, account, logout } = useAtlas();
   const [confirm, setConfirm] = useState<string | null>(null);
   if (!snapshot || !data) return <PageSkeleton />;
   const demo = mode === "demo";
@@ -84,7 +84,20 @@ export function PatrimoineView() {
                         {value !== null && paid > 0 && <> · {formatPct(value / paid - 1, { decimals: 1, sign: true })}</>}
                       </span>
                     </div>
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-1">
+                      {p.end && instrument && confirm !== p.id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const { end: _end, ...ongoing } = p; // eslint-disable-line @typescript-eslint/no-unused-vars
+                            savePlan(instrument, ongoing);
+                            haptic(12);
+                          }}
+                          className="touche rounded-full bg-white/[0.08] px-3 py-1 text-[12.5px]"
+                        >
+                          Le remettre en cours
+                        </button>
+                      )}
                       {confirm === p.id ? (
                         <span className="flex gap-1">
                           <button type="button" onClick={() => setConfirm(null)} className="touche rounded-full px-3 py-1 text-[12.5px] text-brume">Garder</button>
