@@ -66,7 +66,7 @@ export function LabView() {
       </Reveal>
       <AnimatePresence mode="wait">
         <motion.div key={tool} initial={{ opacity: 0, y: 14, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
-          {tool === "futur" && <FutureTool snapshot={snapshot} expectedReturn={data.expectedReturn} plans={plans} instruments={data.instruments} />}
+          {tool === "futur" && <FutureTool snapshot={snapshot} expectedReturn={data.expectedReturn} plans={plans} instruments={data.instruments} mode={mode} />}
           {tool === "crises" && <CrisesTool snapshot={snapshot} />}
           {tool === "jumeau" && <TwinTool snapshot={snapshot} data={data} />}
           {tool === "avant" && <BeforeBuyTool snapshot={snapshot} data={data} />}
@@ -88,7 +88,7 @@ function Note({ children }: { children: React.ReactNode }) {
 
 /* ——— Le futur ——— */
 
-function FutureTool({ snapshot, expectedReturn, plans, instruments }: { snapshot: Snapshot; expectedReturn: number; plans: SavingsPlan[]; instruments: Record<string, Instrument> }) {
+function FutureTool({ snapshot, expectedReturn, plans, instruments, mode }: { snapshot: Snapshot; expectedReturn: number; plans: SavingsPlan[]; instruments: Record<string, Instrument>; mode: "demo" | "real" | null }) {
   // Montant mensuel de tes plans : le plus haut des douze prochains mois (un plan qui démarre le mois prochain compte).
   const plansMonthly = Math.max(0, ...planSchedule(plans, snapshot.today, 12));
   // Point de départ : ce que tu possèdes aujourd'hui et tes plans d'épargne en cours, au centime près.
@@ -138,11 +138,13 @@ function FutureTool({ snapshot, expectedReturn, plans, instruments }: { snapshot
             .
           </>
         ) : (
-          <>. Ajoute tes plans d&apos;épargne dans « Mon patrimoine » pour qu&apos;ils servent de point de départ.</>
+          <>
+            . <span className="text-braise/90">Aucun plan d&apos;épargne trouvé dans ton portefeuille{mode === "demo" ? " (tu regardes la démo)" : ""}</span> : règle le versement mensuel avec le curseur ci-dessous, ou ajoute ton plan dans « Mon patrimoine ».
+          </>
         )}
       </p>
       <Headline>
-        Dans {years} ans, en {thisYear + years}, le scénario médian donne <Money value={last.p50} className="font-sans text-[0.85em] font-medium" />.{" "}
+        En versant <Money value={monthly} className="font-sans text-[0.85em] font-medium" /> par mois, dans {years} ans, en {thisYear + years}, le scénario médian donne <Money value={last.p50} className="font-sans text-[0.85em] font-medium" />.{" "}
         <span className="text-brume">
           Dans 8 cas sur 10, entre <Money value={last.p10} /> et <Money value={last.p90} />.
         </span>
