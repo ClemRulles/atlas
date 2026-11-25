@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { PageSkeleton } from "@/components/shell/states";
 import { EXPENSES_EXPLAINED, ExpensesEditor } from "@/components/shell/sheets";
+import { FaceIdSetting } from "./FaceIdSetting";
 import { Card, Money, Reveal } from "@/components/ui/primitives";
 import { planDates } from "@/lib/domain/plans";
 import { formatEUR, formatNumber, formatPct } from "@/lib/format";
@@ -185,6 +186,7 @@ export function PatrimoineView() {
               <button type="button" onClick={logout} className="touche rounded-full px-4 py-2.5 text-[14px] text-brume underline decoration-white/20 underline-offset-2">Se déconnecter</button>
             )}
           </div>
+          {account?.user && account.sync && <FaceIdSetting user={account.user} />}
         </Card>
       </Reveal>
     </div>

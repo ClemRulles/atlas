@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkPassword, createSession, hashPassword, parseUsers, readSession, sessionSecret } from "./auth";
+import { checkPassword, createSession, hashPassword, parseUsers, readSession, readToken, sessionSecret, signToken } from "./auth";
 
 describe("comptes", () => {
   const salt = "sel-de-test";
@@ -34,5 +34,22 @@ describe("comptes", () => {
     expect(derived).not.toContain("jeton");
     expect(sessionSecret({ KV_REST_API_TOKEN: "jeton" })).toBe(derived);
     expect(sessionSecret({})).toBe("");
+  });
+});
+
+describe("défi signé des clés d'accès", () => {
+  const secret = "un-secret-assez-long-pour-test";
+  it("se relit tant qu'il est valable", () => {
+    const t = signToken({ c: "abc", u: "clement" }, secret, 60_000, 1000);
+    expect(readToken(t, secret, 2000)).toMatchObject({ c: "abc", u: "clement" });
+  });
+  it("expire, et refuse une signature ou un secret différents", () => {
+    const t = signToken({ c: "abc" }, secret, 60_000, 1000);
+    expect(readToken(t, secret, 70_000)).toBeNull();
+    expect(readToken(t, "autre-secret-assez-long", 2000)).toBeNull();
+    const [payload] = t.split(".");
+    const forged = `${Buffer.from(JSON.stringify({ c: "zzz", exp: 9e15 })).toString("base64url")}.${t.split(".")[1]}`;
+    expect(readToken(forged, secret, 2000)).toBeNull();
+    expect(payload.length).toBeGreaterThan(0);
   });
 });

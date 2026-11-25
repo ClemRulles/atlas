@@ -31,6 +31,15 @@ Sans configuration, Atlas reste ouvert et garde les données sur l'appareil. Pou
 
 À la première connexion, les données déjà présentes sur l'appareil partent dans le compte ; ensuite, la version la plus récente gagne.
 
+### Face ID / Touch ID (clés d'accès)
+
+Une fois connecté avec son mot de passe, Atlas propose d'activer Face ID (Touch ID sur Mac) sur l'appareil. C'est une clé d'accès WebAuthn : la clé privée reste dans l'appareil, le serveur garde seulement la clé publique (Redis, `atlas:passkeys:<compte>`) et vérifie chaque signature (`@simplewebauthn`). Rien de plus à configurer : il faut seulement les comptes et Upstash déjà en place.
+
+- Connexion : « Continuer avec Face ID » sur `/login`, sans identifiant.
+- Verrou : avec Face ID activé, l'app se verrouille à l'ouverture et après cinq minutes en arrière-plan ; elle s'ouvre en iris depuis l'orbe d'Atlas.
+- Réglage : « Mon patrimoine » → « Mes données » → Face ID (activer, verrouiller maintenant, désactiver).
+- Une clé d'accès est liée à l'adresse du site : celle créée sur `atlas-patrimoine-psi.vercel.app` ne marche que là.
+
 ## Saisir ses placements
 
 Tout se fait en euros ; l'app retrouve elle-même les cours et la devise du titre :

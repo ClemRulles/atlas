@@ -39,3 +39,27 @@ export async function loadUserData(userId: string): Promise<unknown | null> {
 export async function saveUserData(userId: string, data: unknown): Promise<void> {
   await command(["SET", key(userId), JSON.stringify(data)]);
 }
+
+/* ——— Clés d'accès (Face ID, Touch ID) ——— */
+
+export interface StoredPasskey {
+  /** Identifiant de la clé, base64url. */
+  id: string;
+  /** Clé publique COSE, base64url. */
+  publicKey: string;
+  counter: number;
+  transports?: string[];
+  createdAt: string;
+  label?: string;
+}
+
+const passkeyKey = (userId: string) => `atlas:passkeys:${userId}`;
+
+export async function loadPasskeys(userId: string): Promise<StoredPasskey[]> {
+  const raw = await command<string | null>(["GET", passkeyKey(userId)]);
+  return raw ? (JSON.parse(raw) as StoredPasskey[]) : [];
+}
+
+export async function savePasskeys(userId: string, passkeys: StoredPasskey[]): Promise<void> {
+  await command(["SET", passkeyKey(userId), JSON.stringify(passkeys)]);
+}

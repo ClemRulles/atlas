@@ -11,6 +11,7 @@ import { AddSheet } from "@/components/add/AddSheet";
 import { CaptureSheet } from "@/components/add/CaptureSheet";
 import { CsvSheet } from "@/components/add/CsvSheet";
 import { ChatSheet, ExpensesSheet, ModeSheet } from "./sheets";
+import { LockScreen } from "@/components/lock/LockScreen";
 
 export const PAGES = [
   { href: "/", label: "Aujourd'hui", Icon: IconToday },
@@ -32,7 +33,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <AtlasProvider>
       <ServiceWorker />
       <Aurora />
-      <div className="relative z-10 mx-auto w-full max-w-6xl pb-36 pl-[max(20px,env(safe-area-inset-left))] pr-[max(20px,env(safe-area-inset-right))] pt-[calc(14px+env(safe-area-inset-top))] sm:pl-[max(32px,env(safe-area-inset-left))] sm:pr-[max(32px,env(safe-area-inset-right))]">
+      <div className="app-root relative z-10 mx-auto w-full max-w-6xl pb-36 pl-[max(20px,env(safe-area-inset-left))] pr-[max(20px,env(safe-area-inset-right))] pt-[calc(14px+env(safe-area-inset-top))] sm:pl-[max(32px,env(safe-area-inset-left))] sm:pr-[max(32px,env(safe-area-inset-right))]">
         <TopBar />
         {children}
       </div>
@@ -43,6 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <ChatSheet />
       <ModeSheet />
       <ExpensesSheet />
+      <LockScreen />
     </AtlasProvider>
   );
 }

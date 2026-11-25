@@ -1,4 +1,4 @@
-import { authConfig, checkPassword, createSession, SESSION_COOKIE, sessionCookieOptions } from "@/lib/server/auth";
+import { authConfig, checkPassword, createSession, serializeSessionCookie } from "@/lib/server/auth";
 
 /** POST /api/auth/login { user, password } : ouvre une session de 60 jours. */
 export async function POST(request: Request) {
@@ -10,11 +10,7 @@ export async function POST(request: Request) {
   const ok = !!user && typeof body.password === "string" && checkPassword(user, body.password);
   if (!ok || !user) return Response.json({ error: "Identifiant ou mot de passe incorrect." }, { status: 401 });
   const response = Response.json({ user: { id: user.id, name: user.name } });
-  response.headers.append("Set-Cookie", serialize(createSession(user.id, secret)));
+  response.headers.append("Set-Cookie", serializeSessionCookie(createSession(user.id, secret)));
   return response;
 }
 
-function serialize(value: string): string {
-  const o = sessionCookieOptions;
-  return [`${SESSION_COOKIE}=${value}`, `Path=${o.path}`, `Max-Age=${o.maxAge}`, "HttpOnly", `SameSite=Lax`, o.secure ? "Secure" : ""].filter(Boolean).join("; ");
-}

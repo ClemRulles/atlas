@@ -84,3 +84,29 @@ export const sessionCookieOptions = {
   path: "/",
   maxAge: SESSION_DAYS * 86_400,
 };
+
+/** Petit jeton signé et daté (défi d'une clé d'accès, valable quelques minutes). */
+export function signToken(data: Record<string, unknown>, secret: string, ttlMs: number, now = Date.now()): string {
+  const payload = Buffer.from(JSON.stringify({ ...data, exp: now + ttlMs })).toString("base64url");
+  return `${payload}.${sign(payload, secret)}`;
+}
+
+export function readToken<T extends Record<string, unknown>>(token: string | undefined, secret: string, now = Date.now()): T | null {
+  if (!token || !secret) return null;
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature) return null;
+  const expected = Buffer.from(sign(payload, secret));
+  const given = Buffer.from(signature);
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString()) as T & { exp: number };
+    return typeof data.exp === "number" && data.exp > now ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+export function serializeSessionCookie(value: string): string {
+  const o = sessionCookieOptions;
+  return [`${SESSION_COOKIE}=${value}`, `Path=${o.path}`, `Max-Age=${o.maxAge}`, "HttpOnly", "SameSite=Lax", o.secure ? "Secure" : ""].filter(Boolean).join("; ");
+}

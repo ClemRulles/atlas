@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 import { AppShell } from "@/components/shell/AppShell";
+import { LOCK_BOOT_SCRIPT } from "@/lib/lock-boot";
 import "./globals.css";
 
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
@@ -27,7 +28,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="fr" className={`${geist.variable} ${geistMono.variable} ${newsreader.variable}`}>
+    <html lang="fr" className={`${geist.variable} ${geistMono.variable} ${newsreader.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Voile la page avant tout affichage quand Face ID verrouille l'app : rien ne transparaît. */}
+        <script dangerouslySetInnerHTML={{ __html: LOCK_BOOT_SCRIPT }} />
+      </head>
       <body className="min-h-dvh">
         <AppShell>{children}</AppShell>
       </body>
