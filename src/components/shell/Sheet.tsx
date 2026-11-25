@@ -21,14 +21,14 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
           <motion.button
             type="button"
             aria-label="Fermer"
-            className="absolute inset-0 bg-black/55 backdrop-blur-[3px]"
+            className="absolute inset-0 bg-[var(--fond-voile)] backdrop-blur-[3px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
           />
           <motion.div
-            className="relative max-h-[88dvh] w-full overflow-y-auto rounded-t-[32px] border border-white/10 bg-[#0d0f17]/95 px-5 pt-3 pb-[calc(28px+env(safe-area-inset-bottom))] shadow-[0_-20px_80px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl sm:max-w-lg sm:rounded-[32px] sm:pb-7"
+            className="relative max-h-[88dvh] w-full overflow-y-auto rounded-t-[32px] border border-voile/10 bg-[var(--feuille)] px-5 pt-3 pb-[calc(28px+env(safe-area-inset-bottom))] shadow-[var(--ombre-feuille)] backdrop-blur-2xl sm:max-w-lg sm:rounded-[32px] sm:pb-7"
             initial={{ y: "100%", opacity: 0.6 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: "100%", opacity: 0 }}
@@ -42,7 +42,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
           >
             {/* Poignée : on la tire vers le bas pour fermer, le reste de la feuille défile normalement. */}
             <div className="-mx-5 -mt-3 mb-2 flex cursor-grab touch-none justify-center pt-3 pb-3 sm:hidden" onPointerDown={(e) => controls.start(e)}>
-              <div className="h-1.5 w-10 rounded-full bg-white/20" />
+              <div className="h-1.5 w-10 rounded-full bg-voile/20" />
             </div>
             {children}
           </motion.div>

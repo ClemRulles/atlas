@@ -127,9 +127,9 @@ export default function LoginPage() {
                   </span>
                 </PrimaryButton>
                 <div className="flex w-full items-center gap-3 text-ombre">
-                  <span className="h-px flex-1 bg-white/10" />
+                  <span className="h-px flex-1 bg-voile/10" />
                   <span className="repere">ou ton mot de passe</span>
-                  <span className="h-px flex-1 bg-white/10" />
+                  <span className="h-px flex-1 bg-voile/10" />
                 </div>
               </div>
             )}
@@ -144,7 +144,7 @@ export default function LoginPage() {
                 <TextInput id="login-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
               </label>
               {error && <p className="text-[13.5px] text-braise">{error}</p>}
-              <button type="submit" disabled={busy || !user || !password} className={`touche w-full rounded-full py-4 text-[15.5px] font-medium disabled:opacity-40 ${supported ? "verre" : "bg-white text-nuit"}`}>
+              <button type="submit" disabled={busy || !user || !password} className={`touche w-full rounded-full py-4 text-[15.5px] font-medium disabled:opacity-40 ${supported ? "verre" : "bg-craie text-nuit"}`}>
                 {busy && orb === "idle" ? "Connexion…" : "Se connecter"}
               </button>
             </form>

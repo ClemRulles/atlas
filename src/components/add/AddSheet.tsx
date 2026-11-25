@@ -26,7 +26,7 @@ export function AddSheet() {
   return (
     <Sheet open={open} onClose={() => openSheet(null)} title="Ajouter une position">
       {mode === "demo" && (
-        <p className="mb-4 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-[13.5px] text-brume">
+        <p className="mb-4 rounded-2xl border border-voile/[0.08] bg-voile/[0.04] px-4 py-3 text-[13.5px] text-brume">
           Tu regardes la démo. Ce que tu ajoutes va dans ton vrai portefeuille, et l&apos;app basculera dessus.
         </p>
       )}
@@ -109,7 +109,7 @@ function SearchStep({ onPick, onCsv, onCapture }: { onPick: (l: Listing) => void
               <button
                 type="button"
                 onClick={() => (haptic(), onPick(r))}
-                className="touche grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-white/[0.07] py-3 text-left first:border-t-0"
+                className="touche grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-voile/[0.07] py-3 text-left first:border-t-0"
               >
                 <span className="min-w-0">
                   <span className="block truncate text-[15px]">{r.name}</span>
@@ -117,18 +117,18 @@ function SearchStep({ onPick, onCsv, onCapture }: { onPick: (l: Listing) => void
                     {r.symbol} · {r.exchange}
                   </span>
                 </span>
-                <span className="rounded-full border border-white/10 px-2.5 py-1 text-[11.5px] text-brume">{TYPE_LABELS[r.type]}</span>
+                <span className="rounded-full border border-voile/10 px-2.5 py-1 text-[11.5px] text-brume">{TYPE_LABELS[r.type]}</span>
               </button>
             </li>
           ))}
         </ul>
       </div>
-      <div className="grid grid-cols-2 gap-2 border-t border-white/10 pt-4">
-        <button type="button" onClick={onCsv} className="touche flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3.5 text-left text-[14px]">
+      <div className="grid grid-cols-2 gap-2 border-t border-voile/10 pt-4">
+        <button type="button" onClick={onCsv} className="touche flex items-center gap-3 rounded-2xl border border-voile/[0.08] bg-voile/[0.03] p-3.5 text-left text-[14px]">
           <IconFile className="shrink-0 text-brume" />
           Importer un CSV
         </button>
-        <button type="button" onClick={onCapture} className="touche flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3.5 text-left text-[14px]">
+        <button type="button" onClick={onCapture} className="touche flex items-center gap-3 rounded-2xl border border-voile/[0.08] bg-voile/[0.03] p-3.5 text-left text-[14px]">
           <IconCamera className="shrink-0 text-brume" />
           Capture d&apos;écran
         </button>

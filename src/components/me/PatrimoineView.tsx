@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { PageSkeleton } from "@/components/shell/states";
 import { EXPENSES_EXPLAINED, ExpensesEditor } from "@/components/shell/sheets";
+import { AppearanceSetting } from "./AppearanceSetting";
 import { FaceIdSetting } from "./FaceIdSetting";
 import { Card, Money, Reveal } from "@/components/ui/primitives";
 import { planDates } from "@/lib/domain/plans";
@@ -45,7 +46,7 @@ export function PatrimoineView() {
             Tout ce qu&apos;Atlas sait de toi est ici. Tes plans d&apos;épargne et tes lignes font tes chiffres du jour, ce que tu possèdes et le laboratoire. Tes dépenses donnent les morceaux de vie et les paliers du simulateur.
           </p>
           {demo && (
-            <button type="button" onClick={() => openSheet("mode")} className="touche self-start rounded-full bg-white px-5 py-3 text-[14.5px] font-medium text-nuit">
+            <button type="button" onClick={() => openSheet("mode")} className="touche self-start rounded-full bg-craie px-5 py-3 text-[14.5px] font-medium text-nuit">
               Tu regardes la démo · passer à mon vrai portefeuille
             </button>
           )}
@@ -69,7 +70,7 @@ export function PatrimoineView() {
                 const { parts, value } = planValue(p.id, p.instrumentId);
                 const paid = planDates(p, today).length * p.amountEUR;
                 return (
-                  <li key={p.id} className="flex flex-col gap-1.5 border-t border-white/[0.07] py-3.5 first:border-t-0">
+                  <li key={p.id} className="flex flex-col gap-1.5 border-t border-voile/[0.07] py-3.5 first:border-t-0">
                     <div className="flex items-baseline justify-between gap-3">
                       <span className="min-w-0 truncate text-[15px]">{instrument?.name ?? p.instrumentId}</span>
                       <span className="shrink-0 text-[15px] tabular">{value === null ? "—" : <Money value={value} />}</span>
@@ -94,7 +95,7 @@ export function PatrimoineView() {
                             savePlan(instrument, ongoing);
                             haptic(12);
                           }}
-                          className="touche rounded-full bg-white/[0.08] px-3 py-1 text-[12.5px]"
+                          className="touche rounded-full bg-voile/[0.08] px-3 py-1 text-[12.5px]"
                         >
                           Le remettre en cours
                         </button>
@@ -114,7 +115,7 @@ export function PatrimoineView() {
             </ul>
           )}
           {planPending > 0 && <p className="text-[12.5px] text-ombre">{planPending} versements en attente de cours : ils apparaîtront dès que les cours seront chargés.</p>}
-          <button type="button" onClick={() => (haptic(), openSheet("add", { kind: "plan" }))} className="touche self-start rounded-full bg-white px-5 py-2.5 text-[14px] font-medium text-nuit">
+          <button type="button" onClick={() => (haptic(), openSheet("add", { kind: "plan" }))} className="touche self-start rounded-full bg-craie px-5 py-2.5 text-[14px] font-medium text-nuit">
             Ajouter un plan d&apos;épargne
           </button>
         </Card>
@@ -131,7 +132,7 @@ export function PatrimoineView() {
           ) : (
             <ul className="flex flex-col">
               {snapshot.lines.map((l) => (
-                <li key={l.instrument.id} className="flex items-baseline justify-between gap-3 border-t border-white/[0.07] py-2.5 text-[14.5px] first:border-t-0">
+                <li key={l.instrument.id} className="flex items-baseline justify-between gap-3 border-t border-voile/[0.07] py-2.5 text-[14.5px] first:border-t-0">
                   <span className="min-w-0 truncate">{l.instrument.name}</span>
                   <span className="shrink-0 tabular">{l.valued.valueEUR === null ? <span className="text-ombre">cours indisponible</span> : <Money value={l.valued.valueEUR} />}</span>
                 </li>
@@ -139,10 +140,10 @@ export function PatrimoineView() {
             </ul>
           )}
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => (haptic(), openSheet("add", { kind: "own" }))} className="touche rounded-full bg-white px-4 py-2.5 text-[14px] font-medium text-nuit">Ajouter une ligne</button>
+            <button type="button" onClick={() => (haptic(), openSheet("add", { kind: "own" }))} className="touche rounded-full bg-craie px-4 py-2.5 text-[14px] font-medium text-nuit">Ajouter une ligne</button>
             <button type="button" onClick={() => openSheet("capture")} className="touche verre rounded-full px-4 py-2.5 text-[14px]">Capture d&apos;écran</button>
             <button type="button" onClick={() => openSheet("csv")} className="touche verre rounded-full px-4 py-2.5 text-[14px]">Fichier CSV</button>
-            <Link href="/" className="touche rounded-full px-4 py-2.5 text-[14px] text-brume underline decoration-white/20 underline-offset-2">Voir le détail</Link>
+            <Link href="/" className="touche rounded-full px-4 py-2.5 text-[14px] text-brume underline decoration-voile/20 underline-offset-2">Voir le détail</Link>
           </div>
         </Card>
       </Reveal>
@@ -164,6 +165,10 @@ export function PatrimoineView() {
       </Reveal>
 
       <Reveal i={4}>
+        <AppearanceSetting />
+      </Reveal>
+
+      <Reveal i={5}>
         <Card className="flex flex-col gap-3">
           <span className="repere">Mes données</span>
           {account?.user ? (
@@ -183,7 +188,7 @@ export function PatrimoineView() {
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => openSheet("mode")} className="touche verre rounded-full px-4 py-2.5 text-[14px]">Sauvegarde et démo</button>
             {account?.user && (
-              <button type="button" onClick={logout} className="touche rounded-full px-4 py-2.5 text-[14px] text-brume underline decoration-white/20 underline-offset-2">Se déconnecter</button>
+              <button type="button" onClick={logout} className="touche rounded-full px-4 py-2.5 text-[14px] text-brume underline decoration-voile/20 underline-offset-2">Se déconnecter</button>
             )}
           </div>
           {account?.user && account.sync && <FaceIdSetting user={account.user} />}

@@ -140,7 +140,7 @@ export function CaptureSheet() {
         </div>
 
         {stage === "choose" && (
-          <label className="touche flex cursor-pointer flex-col items-center gap-1 rounded-[22px] border border-dashed border-white/20 bg-white/[0.03] px-4 py-7 text-center">
+          <label className="touche flex cursor-pointer flex-col items-center gap-1 rounded-[22px] border border-dashed border-voile/20 bg-voile/[0.03] px-4 py-7 text-center">
             <span className="text-[15px]">Choisir une capture</span>
             <span className="text-[12.5px] text-ombre">Une capture à la fois ; recommence pour la suite de la liste</span>
             <input id="capture-fichier" type="file" accept="image/*" className="sr-only" onChange={(e) => e.target.files?.[0] && void read(e.target.files[0])} />
@@ -150,8 +150,8 @@ export function CaptureSheet() {
         {stage === "reading" && (
           <div className="flex flex-col gap-2">
             <p className="text-[14px] text-brume">Lecture de l&apos;image… {Math.round(progress * 100)} %</p>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-              <i className="block h-full rounded-full bg-white transition-[width] duration-300" style={{ width: `${Math.max(4, progress * 100)}%` }} />
+            <div className="h-1.5 overflow-hidden rounded-full bg-voile/10">
+              <i className="block h-full rounded-full bg-craie transition-[width] duration-300" style={{ width: `${Math.max(4, progress * 100)}%` }} />
             </div>
           </div>
         )}
@@ -161,11 +161,11 @@ export function CaptureSheet() {
             <p className="text-[14px] text-brume">Vérifie chaque ligne : le titre reconnu, sa valeur et ce que tu y as investi (déduit de la performance affichée, si elle était visible).</p>
             <ul className="flex flex-col gap-3">
               {rows.map((r) => (
-                <li key={r.id} className={`flex flex-col gap-2 rounded-[18px] border border-white/[0.08] p-3.5 ${r.include ? "bg-white/[0.04]" : "opacity-50"}`}>
+                <li key={r.id} className={`flex flex-col gap-2 rounded-[18px] border border-voile/[0.08] p-3.5 ${r.include ? "bg-voile/[0.04]" : "opacity-50"}`}>
                   <div className="flex items-center gap-2">
                     <input id={`capture-inclure-${r.id}`} type="checkbox" checked={r.include} onChange={(e) => setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, include: e.target.checked } : x)))} className="h-4 w-4 accent-white" aria-label={`Importer ${r.name}`} />
                     <TextInput id={`capture-nom-${r.id}`} aria-label="Nom lu" value={r.name} onChange={(e) => setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, name: e.target.value } : x)))} className="!py-2 text-[14.5px]" />
-                    <button type="button" onClick={() => void lookup(r.id, r.name)} className="touche shrink-0 rounded-full bg-white/[0.08] px-3 py-2 text-[12.5px]">Chercher</button>
+                    <button type="button" onClick={() => void lookup(r.id, r.name)} className="touche shrink-0 rounded-full bg-voile/[0.08] px-3 py-2 text-[12.5px]">Chercher</button>
                   </div>
                   {r.searching ? (
                     <div className="silhouette h-10" />
@@ -201,7 +201,7 @@ export function CaptureSheet() {
           </>
         )}
 
-        {message && <p className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-[13.5px]">{message}</p>}
+        {message && <p className="rounded-2xl border border-voile/10 bg-voile/[0.04] px-4 py-3 text-[13.5px]">{message}</p>}
       </div>
     </Sheet>
   );

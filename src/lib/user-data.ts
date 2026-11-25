@@ -1,3 +1,4 @@
+import { isPalette, isTheme, type PaletteId, type ThemeChoice } from "./appearance";
 /**
  * Données de l'utilisateur : ce qu'il saisit (positions, dépenses) et le cache des cours.
  * Fonctions pures : la persistance est dans db.ts, le réseau dans market-client.ts.
@@ -20,6 +21,10 @@ export interface Settings {
   expenses: Expense[];
   /** Hypothèse de rendement annuel pour les « morceaux de vie » (ratio). */
   expectedReturn: number;
+  /** Thème choisi (sombre par défaut). */
+  theme?: ThemeChoice;
+  /** Palette de l'aurore (« vivante » par défaut : elle suit la journée). */
+  palette?: PaletteId;
 }
 
 export interface CachedSeries {
@@ -172,7 +177,7 @@ export function readBackup(raw: unknown): { ok: true; backup: Backup } | { ok: f
       version: 1,
       exportedAt: typeof raw.exportedAt === "string" ? raw.exportedAt : new Date(0).toISOString(),
       portfolio: { ...(portfolio as unknown as UserPortfolio), plans: plans as unknown as SavingsPlan[] },
-      settings: { expenses, expectedReturn },
+      settings: { expenses, expectedReturn, ...(isTheme(settings.theme) ? { theme: settings.theme } : {}), ...(isPalette(settings.palette) ? { palette: settings.palette } : {}) },
     },
   };
 }

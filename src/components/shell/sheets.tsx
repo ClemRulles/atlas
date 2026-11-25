@@ -42,7 +42,7 @@ export function ChatSheet() {
         {messages.length > 0 && (
           <ul className="flex max-h-[42dvh] flex-col gap-3 overflow-y-auto pr-1">
             {messages.map((m, i) => (
-              <li key={i} className={`max-w-[88%] rounded-[20px] px-4 py-3 text-[14.5px] leading-snug ${m.from === "toi" ? "self-end bg-white text-nuit" : "self-start bg-white/[0.07]"}`}>
+              <li key={i} className={`max-w-[88%] rounded-[20px] px-4 py-3 text-[14.5px] leading-snug ${m.from === "toi" ? "self-end bg-craie text-nuit" : "self-start bg-voile/[0.07]"}`}>
                 {m.text}
                 {m.link && (
                   <Link href={m.link.href} onClick={() => openSheet(null)} className="mt-2 block text-[13px] text-lavande underline underline-offset-2">
@@ -55,14 +55,14 @@ export function ChatSheet() {
         )}
         <div className="flex flex-wrap gap-2">
           {SUGGESTIONS.map((q) => (
-            <button key={q} type="button" onClick={() => ask(q)} className="touche rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 py-2 text-[13px] text-brume">
+            <button key={q} type="button" onClick={() => ask(q)} className="touche rounded-full border border-voile/[0.08] bg-voile/[0.03] px-3.5 py-2 text-[13px] text-brume">
               {q}
             </button>
           ))}
         </div>
-        <form onSubmit={(e) => (e.preventDefault(), ask(draft))} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] py-1.5 pr-1.5 pl-5">
+        <form onSubmit={(e) => (e.preventDefault(), ask(draft))} className="flex items-center gap-2 rounded-full border border-voile/10 bg-voile/[0.04] py-1.5 pr-1.5 pl-5">
           <input id="chat-question" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Pose ta question…" className="min-w-0 flex-1 bg-transparent text-[16px] text-craie placeholder:text-ombre focus:outline-none" />
-          <button type="submit" disabled={!draft.trim()} className="touche rounded-full bg-white px-4 py-2 text-[13.5px] font-medium text-nuit disabled:opacity-40">Demander</button>
+          <button type="submit" disabled={!draft.trim()} className="touche rounded-full bg-craie px-4 py-2 text-[13.5px] font-medium text-nuit disabled:opacity-40">Demander</button>
         </form>
       </div>
     </Sheet>
@@ -129,12 +129,12 @@ export function ModeSheet() {
           setMode(demo ? "real" : "demo");
           openSheet(null);
         }}
-        className="touche mt-6 w-full rounded-full bg-white py-4 text-[15.5px] font-medium text-nuit"
+        className="touche mt-6 w-full rounded-full bg-craie py-4 text-[15.5px] font-medium text-nuit"
       >
         {demo ? "Passer à mon vrai portefeuille" : "Revoir la démo"}
       </button>
 
-      <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6">
+      <div className="mt-8 flex flex-col gap-3 border-t border-voile/10 pt-6">
         <span className="repere">Tes données</span>
         <p className="text-[13.5px] text-brume">Elles ne quittent jamais ton téléphone. Exporte-les pour les garder à l&apos;abri ou les passer sur un autre appareil.</p>
         <div className="grid grid-cols-2 gap-2">
@@ -147,13 +147,13 @@ export function ModeSheet() {
           </label>
         </div>
         {pending && (
-          <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+          <div className="flex flex-col gap-3 rounded-2xl border border-voile/10 bg-voile/[0.04] p-4">
             <p className="text-[14px]">
               Remplacer ton portefeuille actuel ({portfolio.transactions.length} transactions) par cette sauvegarde ({pending.portfolio.transactions.length} transactions, du{" "}
               {new Intl.DateTimeFormat("fr-BE", { dateStyle: "long" }).format(new Date(pending.exportedAt))}) ?
             </p>
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setPending(null)} className="touche rounded-full bg-white/10 py-2.5 text-[14px]">
+              <button type="button" onClick={() => setPending(null)} className="touche rounded-full bg-voile/10 py-2.5 text-[14px]">
                 Annuler
               </button>
               <button
@@ -163,7 +163,7 @@ export function ModeSheet() {
                   haptic(14);
                   openSheet(null);
                 }}
-                className="touche rounded-full bg-white py-2.5 text-[14px] font-medium text-nuit"
+                className="touche rounded-full bg-craie py-2.5 text-[14px] font-medium text-nuit"
               >
                 Remplacer
               </button>
@@ -201,7 +201,7 @@ export function ExpensesEditor({ onSaved }: { onSaved?: () => void }) {
           </li>
         ))}
       </ul>
-      <button type="button" onClick={() => setRows([...rows, { id: newId("d"), label: "", monthly: "" }])} className="touche self-start rounded-full bg-white/[0.07] px-4 py-2 text-[14px]">
+      <button type="button" onClick={() => setRows([...rows, { id: newId("d"), label: "", monthly: "" }])} className="touche self-start rounded-full bg-voile/[0.07] px-4 py-2 text-[14px]">
         Ajouter une dépense
       </button>
       <Field label={`Rendement attendu : ${formatPct(rate, { decimals: 1 })} par an`} hint="Une hypothèse, pas une promesse : le rendement réel varie fortement d'une année à l'autre.">

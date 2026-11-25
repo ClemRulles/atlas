@@ -59,7 +59,7 @@ export function LabView() {
               role="tab"
               aria-selected={tool === t.id}
               onClick={() => (haptic(), setTool(t.id))}
-              className={`touche shrink-0 rounded-full px-4 py-2.5 text-[14px] ${tool === t.id ? "bg-white text-nuit" : "verre text-brume"}`}
+              className={`touche shrink-0 rounded-full px-4 py-2.5 text-[14px] ${tool === t.id ? "bg-craie text-nuit" : "verre text-brume"}`}
             >
               {t.label}
             </button>
@@ -249,7 +249,7 @@ function CrisesTool({ snapshot }: { snapshot: Snapshot }) {
     <Card className="flex flex-col gap-5">
       <div className="flex flex-wrap gap-2">
         {CRISES.map((c) => (
-          <button key={c.id} type="button" onClick={() => (haptic(), setCrisisId(c.id))} className={`touche rounded-full px-3.5 py-2 text-[13.5px] ${c.id === crisisId ? "bg-white/[0.14] text-craie" : "bg-white/[0.04] text-brume"}`}>
+          <button key={c.id} type="button" onClick={() => (haptic(), setCrisisId(c.id))} className={`touche rounded-full px-3.5 py-2 text-[13.5px] ${c.id === crisisId ? "bg-voile/[0.14] text-craie" : "bg-voile/[0.04] text-brume"}`}>
             {c.label}
           </button>
         ))}
@@ -412,12 +412,12 @@ function BeforeBuyTool({ snapshot, data }: { snapshot: Snapshot; data: Portfolio
           <ul className="flex flex-col">
             {results.map((r) => (
               <li key={r.symbol}>
-                <button type="button" onClick={() => void pick(r)} className="touche grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-white/[0.07] py-3 text-left first:border-t-0">
+                <button type="button" onClick={() => void pick(r)} className="touche grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-voile/[0.07] py-3 text-left first:border-t-0">
                   <span className="min-w-0">
                     <span className="block truncate text-[15px]">{r.name}</span>
                     <span className="repere mt-0.5 block truncate">{r.symbol} · {r.exchange}</span>
                   </span>
-                  <span className="rounded-full border border-white/10 px-2.5 py-1 text-[11.5px] text-brume">{TYPE_LABELS[r.type]}</span>
+                  <span className="rounded-full border border-voile/10 px-2.5 py-1 text-[11.5px] text-brume">{TYPE_LABELS[r.type]}</span>
                 </button>
               </li>
             ))}
@@ -430,7 +430,7 @@ function BeforeBuyTool({ snapshot, data }: { snapshot: Snapshot; data: Portfolio
               <span className="repere">{[picked.instrument.symbol, TYPE_LABELS[picked.instrument.type]].join(" · ")}</span>
               <h3 className="mt-1 font-serif text-[24px] leading-tight">{picked.instrument.name}</h3>
             </div>
-            <button type="button" onClick={() => (setPicked(null), setQuery(""))} className="touche shrink-0 rounded-full bg-white/[0.07] px-3.5 py-2 text-[13px]">Changer</button>
+            <button type="button" onClick={() => (setPicked(null), setQuery(""))} className="touche shrink-0 rounded-full bg-voile/[0.07] px-3.5 py-2 text-[13px]">Changer</button>
           </div>
           <Field label="Montant envisagé (€)">
             <TextInput id="avant-montant" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -461,8 +461,8 @@ function BeforeAfter({ result, instruments }: { result: ReturnType<typeof whatIf
               {formatPct(r.before, { decimals: 1 })} → <span className="text-craie">{formatPct(r.after, { decimals: 1 })}</span>
             </span>
           </div>
-          <div className="relative h-[5px] overflow-hidden rounded-full bg-white/[0.07]">
-            <i className="absolute inset-y-0 left-0 rounded-full bg-white/30" style={{ width: `${r.before * 100}%` }} />
+          <div className="relative h-[5px] overflow-hidden rounded-full bg-voile/[0.07]">
+            <i className="absolute inset-y-0 left-0 rounded-full bg-voile/30" style={{ width: `${r.before * 100}%` }} />
             <motion.i className="absolute inset-y-0 left-0 origin-left rounded-full bg-lavande" style={{ width: `${r.after * 100}%` }} initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }} />
           </div>
         </div>
@@ -521,7 +521,7 @@ function ShockTool({ snapshot, data }: { snapshot: Snapshot; data: PortfolioData
               setKey(p.key);
               setDrop(p.drop);
             }}
-            className={`touche rounded-full px-3.5 py-2 text-[13.5px] ${axis === p.axis && key === p.key && drop === p.drop ? "bg-white/[0.14] text-craie" : "bg-white/[0.04] text-brume"}`}
+            className={`touche rounded-full px-3.5 py-2 text-[13.5px] ${axis === p.axis && key === p.key && drop === p.drop ? "bg-voile/[0.14] text-craie" : "bg-voile/[0.04] text-brume"}`}
           >
             {p.label}
           </button>
@@ -540,13 +540,13 @@ function ShockTool({ snapshot, data }: { snapshot: Snapshot; data: PortfolioData
       <div className="flex h-3 gap-[2px] overflow-hidden rounded-full" role="img" aria-label="Part exposée et perte">
         <motion.i className="block h-full rounded-[3px] bg-braise" style={{ flexBasis: 0 }} animate={{ flexGrow: r.lossEUR }} transition={{ duration: 0.6 }} />
         <motion.i className="block h-full rounded-[3px] bg-braise/35" style={{ flexBasis: 0 }} animate={{ flexGrow: Math.max(0, r.exposedEUR - r.lossEUR) }} transition={{ duration: 0.6 }} />
-        <motion.i className="block h-full rounded-[3px] bg-white/[0.12]" style={{ flexBasis: 0 }} animate={{ flexGrow: Math.max(0, r.totalEUR - r.exposedEUR - r.unknownEUR) }} transition={{ duration: 0.6 }} />
+        <motion.i className="block h-full rounded-[3px] bg-voile/[0.12]" style={{ flexBasis: 0 }} animate={{ flexGrow: Math.max(0, r.totalEUR - r.exposedEUR - r.unknownEUR) }} transition={{ duration: 0.6 }} />
         {r.unknownEUR > 0 && <motion.i className="hachures block h-full rounded-[3px]" style={{ flexBasis: 0 }} animate={{ flexGrow: r.unknownEUR }} transition={{ duration: 0.6 }} />}
       </div>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-brume">
         <li className="flex items-center gap-2"><i className="block h-2.5 w-2.5 rounded-[3px] bg-braise" />Perte</li>
         <li className="flex items-center gap-2"><i className="block h-2.5 w-2.5 rounded-[3px] bg-braise/35" />Reste de la part exposée (<Money value={r.exposedEUR} />)</li>
-        <li className="flex items-center gap-2"><i className="block h-2.5 w-2.5 rounded-[3px] bg-white/[0.12]" />Non exposé</li>
+        <li className="flex items-center gap-2"><i className="block h-2.5 w-2.5 rounded-[3px] bg-voile/[0.12]" />Non exposé</li>
         {r.unknownEUR > 0 && <li className="flex items-center gap-2"><i className="hachures block h-2.5 w-2.5 rounded-[3px]" />Exposition inconnue</li>}
       </ul>
       <div className="grid gap-4 sm:grid-cols-3">
@@ -592,7 +592,7 @@ function ConvictionsTool({ data, today }: { data: PortfolioData; today: string }
       </Headline>
       <ul className="flex flex-col">
         {notes.map((n) => (
-          <li key={`${n.date}-${n.instrument.id}`} className="flex flex-col gap-2 border-t border-white/[0.07] py-4 first:border-t-0">
+          <li key={`${n.date}-${n.instrument.id}`} className="flex flex-col gap-2 border-t border-voile/[0.07] py-4 first:border-t-0">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[14px]">{n.instrument.name}</span>
               <span className="repere">il y a {age(n.ageDays)}</span>

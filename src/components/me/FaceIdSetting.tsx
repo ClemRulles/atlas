@@ -56,11 +56,11 @@ export function FaceIdSetting({ user }: { user: { id: string; name: string } }) 
   }
 
   return (
-    <div className="flex flex-col gap-3 border-t border-white/[0.07] pt-4">
+    <div className="flex flex-col gap-3 border-t border-voile/[0.07] pt-4">
       <div className="flex items-center gap-2.5">
         <IconFaceId className="h-5 w-5 text-lavande" />
         <span className="text-[14.5px]">{bio}</span>
-        <span className={`ml-auto rounded-full px-2.5 py-0.5 text-[11.5px] ${active ? "bg-menthe/15 text-menthe" : "bg-white/[0.06] text-ombre"}`}>{active ? "activé" : "désactivé"}</span>
+        <span className={`ml-auto rounded-full px-2.5 py-0.5 text-[11.5px] ${active ? "bg-menthe/15 text-menthe" : "bg-voile/[0.06] text-ombre"}`}>{active ? "activé" : "désactivé"}</span>
       </div>
       <p className="text-[13.5px] leading-relaxed text-brume">
         {active
@@ -71,11 +71,11 @@ export function FaceIdSetting({ user }: { user: { id: string; name: string } }) 
       <div className="flex flex-wrap gap-2">
         {active ? (
           <>
-            <button type="button" onClick={lockNow} className="touche rounded-full bg-white px-4 py-2.5 text-[14px] font-medium text-nuit">Verrouiller maintenant</button>
-            <button type="button" onClick={deactivate} disabled={busy} className="touche rounded-full px-4 py-2.5 text-[14px] text-brume underline decoration-white/20 underline-offset-2">Désactiver</button>
+            <button type="button" onClick={lockNow} className="touche rounded-full bg-craie px-4 py-2.5 text-[14px] font-medium text-nuit">Verrouiller maintenant</button>
+            <button type="button" onClick={deactivate} disabled={busy} className="touche rounded-full px-4 py-2.5 text-[14px] text-brume underline decoration-voile/20 underline-offset-2">Désactiver</button>
           </>
         ) : (
-          <button type="button" onClick={activate} disabled={busy} className="touche flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-[14px] font-medium text-nuit disabled:opacity-50">
+          <button type="button" onClick={activate} disabled={busy} className="touche flex items-center gap-2 rounded-full bg-craie px-4 py-2.5 text-[14px] font-medium text-nuit disabled:opacity-50">
             <IconFaceId className="h-4 w-4" />
             {busy ? "Un instant…" : `Activer ${bio}`}
           </button>

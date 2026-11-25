@@ -7,6 +7,7 @@ import { useEffect, type ReactNode } from "react";
 import { IconChat, IconEye, IconEyeOff, IconOwn, IconPlus, IconToday, IconWhatIf } from "@/components/ui/icons";
 import { AtlasProvider, useAtlas } from "@/lib/store";
 import { auroraFor, haptic } from "@/lib/ui";
+import { applyLook, DEFAULT_PALETTE, DEFAULT_THEME, paletteColors } from "@/lib/appearance";
 import { AddSheet } from "@/components/add/AddSheet";
 import { CaptureSheet } from "@/components/add/CaptureSheet";
 import { CsvSheet } from "@/components/add/CsvSheet";
@@ -58,17 +59,37 @@ function ServiceWorker() {
   return null;
 }
 
-/** Lumière d'ambiance : sa teinte suit la variation du jour. */
+/**
+ * Lumière d'ambiance. Palette « vivante » : la teinte suit la variation du jour ; sinon la palette
+ * choisie, fixe. Applique aussi le thème (et suit l'appareil en mode automatique).
+ */
 function Aurora() {
-  const { snapshot } = useAtlas();
+  const { snapshot, settings, mode } = useAtlas();
+  // Tant que les réglages ne sont pas lus, le script de démarrage a déjà posé le bon thème.
+  const ready = mode !== null;
+  const theme = settings.theme ?? DEFAULT_THEME;
+  const palette = settings.palette ?? DEFAULT_PALETTE;
   useEffect(() => {
-    const { a1, a2, a3, mood } = auroraFor(snapshot?.dayPct ?? 0);
+    if (!ready) return;
+    applyLook(theme, palette);
+    if (theme !== "auto") return;
+    const media = matchMedia("(prefers-color-scheme: light)");
+    const follow = () => applyLook(theme, palette);
+    media.addEventListener("change", follow);
+    return () => media.removeEventListener("change", follow);
+  }, [ready, theme, palette]);
+  useEffect(() => {
+    if (!ready) return;
+    const { a1, a2, a3, mood } = paletteColors(palette) ?? auroraFor(snapshot?.dayPct ?? 0);
     const root = document.documentElement.style;
     root.setProperty("--a1", a1);
     root.setProperty("--a2", a2);
     root.setProperty("--a3", a3);
     root.setProperty("--mood", mood);
-  }, [snapshot?.dayPct]);
+    // Couleur du signe du jour (texte) : indépendante de la palette, lisible dans les deux thèmes.
+    const day = snapshot?.dayPct ?? 0;
+    root.setProperty("--signe", day > 0.0005 ? "var(--color-menthe)" : day < -0.0005 ? "var(--color-braise)" : "var(--color-lavande)");
+  }, [ready, snapshot?.dayPct, palette]);
   return (
     <div className="aurore" aria-hidden="true">
       <i />
@@ -98,7 +119,7 @@ function TopBar() {
           }}
           aria-pressed={discreet}
           aria-label={discreet ? "Afficher les montants" : "Mode discret : flouter les montants"}
-          className={`touche grid h-10 w-10 place-items-center rounded-full ${discreet ? "bg-white text-nuit" : "verre text-brume"}`}
+          className={`touche grid h-10 w-10 place-items-center rounded-full ${discreet ? "bg-craie text-nuit" : "verre text-brume"}`}
         >
           {discreet ? <IconEyeOff /> : <IconEye />}
         </button>
@@ -121,14 +142,14 @@ function Dock() {
       <button type="button" aria-label="Demande à ton patrimoine" onClick={() => (haptic(), openSheet("chat"))} className="touche verre-sombre grid h-12 w-12 place-items-center rounded-full">
         <IconChat />
       </button>
-      <button type="button" aria-label="Ajouter une position" onClick={() => (haptic(), openSheet("add"))} className="touche grid h-12 w-12 place-items-center rounded-full bg-white text-nuit shadow-[0_10px_30px_-8px_rgba(255,255,255,0.35)]">
+      <button type="button" aria-label="Ajouter une position" onClick={() => (haptic(), openSheet("add"))} className="touche grid h-12 w-12 place-items-center rounded-full bg-craie text-nuit shadow-[var(--lueur-bouton)]">
         <IconPlus />
       </button>
       <div className="verre-sombre relative flex rounded-full p-[5px]">
         <motion.span
           aria-hidden="true"
-          className="absolute top-[5px] left-[5px] h-10 w-12 rounded-full bg-white/10"
-          style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,.14), 0 0 22px -4px var(--mood)" }}
+          className="absolute top-[5px] left-[5px] h-10 w-12 rounded-full bg-voile/10"
+          style={{ boxShadow: "var(--reflet), 0 0 22px -4px var(--mood)" }}
           animate={{ x: current * 48 }}
           transition={{ type: "spring", stiffness: 380, damping: 32 }}
         />

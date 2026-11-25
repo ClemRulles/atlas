@@ -40,6 +40,10 @@ Une fois connecté avec son mot de passe, Atlas propose d'activer Face ID (Touch
 - Réglage : « Mon patrimoine » → « Mes données » → Face ID (activer, verrouiller maintenant, désactiver).
 - Une clé d'accès est liée à l'adresse du site : celle créée sur `atlas-patrimoine-psi.vercel.app` ne marche que là.
 
+### Apparence : thème et couleur du fond
+
+« Mon patrimoine » → « Apparence » : thème Automatique (suit l'appareil), Sombre (par défaut) ou Clair, et six palettes pour l'aurore du fond (Vivante, qui suit la journée, puis Boréale, Lagon, Braise, Aube, Graphite). Seul le fond change ; cartes, textes et graphiques restent neutres, et le chiffre clé du jour garde la couleur de son signe. Le choix est enregistré dans les réglages du compte et en miroir local (`atlas:look`) pour être appliqué avant le premier affichage (`src/lib/appearance.ts`). Toutes les couleurs passent par des jetons (`--color-*`, `--color-voile`, `--feuille`…) redéfinis sous `html[data-theme="light"]` dans `globals.css`.
+
 ## Saisir ses placements
 
 Tout se fait en euros ; l'app retrouve elle-même les cours et la devise du titre :

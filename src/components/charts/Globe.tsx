@@ -3,6 +3,14 @@
 import createGlobe from "cobe";
 import { useEffect, useRef, useState } from "react";
 import { COUNTRY_LOCATIONS, EXCHANGES, isOpen } from "@/lib/domain/exchanges";
+import { useResolvedTheme } from "@/lib/use-theme";
+
+type RGB = [number, number, number];
+/** Couleurs du globe : points lumineux sur la nuit, encre et ambre sur le papier. */
+const GLOBE_LOOK: Record<"dark" | "light", { dark: number; base: RGB; glow: RGB; country: RGB; open: RGB; closed: RGB; brightness: number }> = {
+  dark: { dark: 1, base: [0.28, 0.3, 0.44], glow: [0.15, 0.17, 0.3], country: [0.62, 0.64, 1], open: [1, 0.86, 0.55], closed: [0.45, 0.47, 0.6], brightness: 5 },
+  light: { dark: 0, base: [0.86, 0.85, 0.83], glow: [0.95, 0.94, 0.92], country: [0.33, 0.34, 0.84], open: [0.85, 0.54, 0], closed: [0.62, 0.63, 0.7], brightness: 1.6 },
+};
 
 export interface GlobeWeight {
   key: string;
@@ -19,6 +27,7 @@ export function Globe({ countries, size = 320 }: { countries: GlobeWeight[]; siz
   const [now, setNow] = useState(() => new Date());
   const drag = useRef<{ x: number; phi: number } | null>(null);
   const phi = useRef(4.6);
+  const theme = useResolvedTheme();
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60_000);
@@ -29,15 +38,16 @@ export function Globe({ countries, size = 320 }: { countries: GlobeWeight[]; siz
     const el = canvas.current;
     if (!el) return;
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const look = GLOBE_LOOK[theme];
     const max = Math.max(...countries.map((c) => c.weight), 0.01);
     const markers = [
       ...countries.flatMap((c) => {
         const location = COUNTRY_LOCATIONS[c.key];
-        return location ? [{ location, size: 0.03 + 0.07 * Math.sqrt(c.weight / max), color: [0.62, 0.64, 1] as [number, number, number] }] : [];
+        return location ? [{ location, size: 0.03 + 0.07 * Math.sqrt(c.weight / max), color: look.country }] : [];
       }),
       ...EXCHANGES.map((x) => {
         const open = isOpen(x, now);
-        return { location: x.location, size: open ? 0.05 : 0.018, color: (open ? [1, 0.86, 0.55] : [0.45, 0.47, 0.6]) as [number, number, number] };
+        return { location: x.location, size: open ? 0.05 : 0.018, color: open ? look.open : look.closed };
       }),
     ];
     let globe: ReturnType<typeof createGlobe>;
@@ -48,13 +58,13 @@ export function Globe({ countries, size = 320 }: { countries: GlobeWeight[]; siz
         height: size * 2,
         phi: phi.current,
         theta: 0.28,
-        dark: 1,
+        dark: look.dark,
         diffuse: 1.15,
         mapSamples: 14000,
-        mapBrightness: 5,
-        baseColor: [0.28, 0.3, 0.44],
-        markerColor: [1, 0.86, 0.55],
-        glowColor: [0.15, 0.17, 0.3],
+        mapBrightness: look.brightness,
+        baseColor: look.base,
+        markerColor: look.open,
+        glowColor: look.glow,
         markers,
       });
     } catch {
@@ -73,7 +83,7 @@ export function Globe({ countries, size = 320 }: { countries: GlobeWeight[]; siz
       cancelAnimationFrame(frame);
       globe.destroy();
     };
-  }, [countries, size, now]);
+  }, [countries, size, now, theme]);
 
   if (failed) return <p className="text-[14px] text-ombre">Le globe a besoin de WebGL, indisponible sur cet appareil.</p>;
   return (

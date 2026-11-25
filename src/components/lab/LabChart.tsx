@@ -65,7 +65,7 @@ export function LabChart({ xLabels, lines, band, markers = [], height = 220, ani
         <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={lines.map((l) => l.label).join(", ")}>
           {ticks.map((t) => (
             <g key={t}>
-              <line x1={left} x2={right} y1={y(t)} y2={y(t)} stroke="rgba(255,255,255,.07)" />
+              <line x1={left} x2={right} y1={y(t)} y2={y(t)} style={{ stroke: "color-mix(in oklab, var(--color-craie) 8%, transparent)" }} />
               <text x={right + 8} y={y(t) + 4} fontSize="11" fill="var(--color-ombre)" className="amt tabular">
                 {fmt(t)}
               </text>
@@ -98,7 +98,7 @@ export function LabChart({ xLabels, lines, band, markers = [], height = 220, ani
               key={`${animationKey}-${idx}`}
               d={path(l.values)}
               fill="none"
-              stroke="#fff"
+              stroke="var(--color-craie)"
               strokeOpacity={l.style === "main" ? 1 : l.style === "ghost" ? 0.55 : 0.35}
               strokeWidth={l.style === "main" ? 2 : 1.5}
               strokeDasharray={l.style === "dashed" ? "3 5" : undefined}
@@ -126,7 +126,7 @@ export function Legend({ items }: { items: { label: string; style: "main" | "gho
           ) : it.style === "marker" ? (
             <i className="block h-2 w-2 rounded-full bg-lavande" />
           ) : (
-            <i className={`block w-4 ${it.style === "dashed" ? "border-t border-dashed border-white/40" : it.style === "ghost" ? "h-[2px] bg-white/55" : "h-[2px] bg-white"}`} />
+            <i className={`block w-4 ${it.style === "dashed" ? "border-t border-dashed border-voile/40" : it.style === "ghost" ? "h-[2px] bg-voile/55" : "h-[2px] bg-craie"}`} />
           )}
           {it.label}
         </li>

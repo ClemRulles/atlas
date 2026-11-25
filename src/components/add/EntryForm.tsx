@@ -182,7 +182,7 @@ export function EntryForm({ listing, known, initialKind, onBack }: { listing: Li
             type="button"
             aria-pressed={kind === k.value}
             onClick={() => (haptic(), setKind(k.value), k.value === "plan" && !broker && setBroker("Trade Republic"))}
-            className={`touche rounded-2xl border px-3.5 py-3 text-left ${kind === k.value ? "border-white/30 bg-white/[0.1]" : "border-white/[0.07] bg-white/[0.03]"}`}
+            className={`touche rounded-2xl border px-3.5 py-3 text-left ${kind === k.value ? "border-voile/30 bg-voile/[0.1]" : "border-voile/[0.07] bg-voile/[0.03]"}`}
           >
             <span className="block text-[14.5px]">{k.label}</span>
             <span className="block text-[12px] text-ombre">{k.hint}</span>
@@ -212,12 +212,12 @@ export function EntryForm({ listing, known, initialKind, onBack }: { listing: Li
             )}
           </div>
           {plan && preview && preview.months === 0 && (
-            <p className="rounded-2xl bg-white/[0.04] px-4 py-3 text-[14px] leading-relaxed">
+            <p className="rounded-2xl bg-voile/[0.04] px-4 py-3 text-[14px] leading-relaxed">
               Premier versement le {firstExecution(plan)} : {formatEUR(plan.amountEUR)} par mois ensuite. Le plan compte déjà dans le simulateur du futur.
             </p>
           )}
           {preview && preview.months > 0 && (
-            <p className="rounded-2xl bg-white/[0.04] px-4 py-3 text-[14px] leading-relaxed">
+            <p className="rounded-2xl bg-voile/[0.04] px-4 py-3 text-[14px] leading-relaxed">
               {preview.months} versements, {formatEUR(preview.paidEUR)} au total, soit environ {formatNumber(preview.parts, { decimals: 2 })} parts
               {preview.valueEUR !== null && <> qui valent {formatEUR(preview.valueEUR)} aujourd&apos;hui</>}.
               <span className="block text-[12.5px] text-ombre">Chaque mois, l&apos;app achète au cours de clôture du jour d&apos;exécution : c&apos;est très proche du prix réel.</span>
@@ -234,7 +234,7 @@ export function EntryForm({ listing, known, initialKind, onBack }: { listing: Li
             </Field>
             {euros("Montant payé", amount, setAmount, "achat-montant", "1000", "Frais compris")}
           </div>
-          <button type="button" onClick={() => setKnowParts(!knowParts)} className="touche self-start text-[13px] text-brume underline decoration-white/20 underline-offset-2">
+          <button type="button" onClick={() => setKnowParts(!knowParts)} className="touche self-start text-[13px] text-brume underline decoration-voile/20 underline-offset-2">
             {knowParts ? "Je ne connais pas le nombre de parts" : "Je connais le nombre exact de parts"}
           </button>
           {knowParts && (
@@ -261,8 +261,8 @@ export function EntryForm({ listing, known, initialKind, onBack }: { listing: Li
       {kind === "own" && (
         <>
           <div className="flex gap-2 text-[13px]">
-            <button type="button" onClick={() => setOwnBy("value")} className={`touche rounded-full px-3.5 py-1.5 ${ownBy === "value" ? "bg-white/[0.12]" : "text-brume"}`}>Je connais sa valeur</button>
-            <button type="button" onClick={() => setOwnBy("parts")} className={`touche rounded-full px-3.5 py-1.5 ${ownBy === "parts" ? "bg-white/[0.12]" : "text-brume"}`}>Je connais le nombre de parts</button>
+            <button type="button" onClick={() => setOwnBy("value")} className={`touche rounded-full px-3.5 py-1.5 ${ownBy === "value" ? "bg-voile/[0.12]" : "text-brume"}`}>Je connais sa valeur</button>
+            <button type="button" onClick={() => setOwnBy("parts")} className={`touche rounded-full px-3.5 py-1.5 ${ownBy === "parts" ? "bg-voile/[0.12]" : "text-brume"}`}>Je connais le nombre de parts</button>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {ownBy === "value" ? (

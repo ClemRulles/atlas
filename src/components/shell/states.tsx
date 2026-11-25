@@ -28,7 +28,7 @@ export function EmptyPortfolio({ question }: { question: string }) {
         Ajoute ta première position : un nom ou un ISIN, une quantité, une date et un prix. Tout reste sur ton téléphone.
       </p>
       <div className="flex flex-wrap gap-3 pt-2">
-        <button type="button" onClick={() => openSheet("add")} className="touche rounded-full bg-white px-6 py-3.5 text-[15px] font-medium text-nuit">
+        <button type="button" onClick={() => openSheet("add")} className="touche rounded-full bg-craie px-6 py-3.5 text-[15px] font-medium text-nuit">
           Ajouter une position
         </button>
         <button type="button" onClick={() => setMode("demo")} className="touche verre rounded-full px-6 py-3.5 text-[15px] text-brume">

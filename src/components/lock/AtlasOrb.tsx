@@ -30,16 +30,16 @@ export function AtlasOrb({ state, size = 176 }: { state: OrbState; size?: number
       <svg viewBox="0 0 200 200" className="relative h-[78%] w-[78%] overflow-visible" aria-hidden="true">
         <defs>
           <radialGradient id="orbe-coeur" cx="38%" cy="32%" r="75%">
-            <stop offset="0%" stopColor="rgba(255,255,255,0.20)" />
-            <stop offset="45%" stopColor="rgba(180,184,255,0.07)" />
-            <stop offset="100%" stopColor="rgba(6,7,11,0)" />
+            <stop offset="0%" style={{ stopColor: "var(--orbe-reflet)", stopOpacity: 0.2 }} />
+            <stop offset="45%" style={{ stopColor: "var(--color-lavande)", stopOpacity: 0.08 }} />
+            <stop offset="100%" style={{ stopColor: "var(--color-nuit)", stopOpacity: 0 }} />
           </radialGradient>
           <clipPath id="orbe-sphere">
             <circle cx="100" cy="100" r="80" />
           </clipPath>
         </defs>
         <circle cx="100" cy="100" r="80" fill="url(#orbe-coeur)" />
-        <g clipPath="url(#orbe-sphere)" stroke="rgba(243,244,248,0.22)" strokeWidth="0.9" fill="none">
+        <g clipPath="url(#orbe-sphere)" style={{ stroke: "color-mix(in oklab, var(--color-craie) 24%, transparent)" }} strokeWidth="0.9" fill="none">
           {/* Parallèles */}
           {[-52, -26, 0, 26, 52].map((y) => (
             <ellipse key={y} cx="100" cy={100 + y} rx={Math.sqrt(80 * 80 - y * y)} ry={Math.max(2, 9 - Math.abs(y) / 8)} />
@@ -49,7 +49,7 @@ export function AtlasOrb({ state, size = 176 }: { state: OrbState; size?: number
             <ellipse key={i} cx="100" cy="100" rx="80" ry="80" className="orbe-meridien" style={{ animationDelay: `${(-i * 12) / meridians.length}s` }} />
           ))}
         </g>
-        <circle cx="100" cy="100" r="80" fill="none" stroke="rgba(243,244,248,0.32)" strokeWidth="1" />
+        <circle cx="100" cy="100" r="80" fill="none" style={{ stroke: "color-mix(in oklab, var(--color-craie) 34%, transparent)" }} strokeWidth="1" />
         {/* Réussite : un cercle menthe se trace autour du globe */}
         <motion.circle
           cx="100"

@@ -142,7 +142,7 @@ export function CsvSheet() {
 
         {!parsed && (
           <>
-            <label className="touche flex cursor-pointer flex-col items-center gap-1 rounded-[22px] border border-dashed border-white/20 bg-white/[0.03] px-4 py-7 text-center">
+            <label className="touche flex cursor-pointer flex-col items-center gap-1 rounded-[22px] border border-dashed border-voile/20 bg-voile/[0.03] px-4 py-7 text-center">
               <span className="text-[15px]">Choisir un fichier</span>
               <span className="text-[12.5px] text-ombre">.csv ou .txt, séparé par ; , ou tabulation</span>
               <input id="csv-fichier" type="file" accept=".csv,.txt,text/csv,text/plain" className="sr-only" onChange={(e) => e.target.files?.[0] && void readFile(e.target.files[0])} />
@@ -150,7 +150,7 @@ export function CsvSheet() {
             <details className="text-[14px] text-brume">
               <summary className="cursor-pointer">Ou coller le contenu</summary>
               <textarea id="csv-texte" rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder={"Date;ISIN;Montant\n02/03/2025;IE00B4L5Y983;200"} className={`${inputClass} mt-3 font-mono text-[13px]`} />
-              <button type="button" onClick={() => analyse(text)} disabled={!text.trim()} className="touche mt-3 rounded-full bg-white/10 px-5 py-2.5 text-[14px] text-craie disabled:opacity-40">
+              <button type="button" onClick={() => analyse(text)} disabled={!text.trim()} className="touche mt-3 rounded-full bg-voile/10 px-5 py-2.5 text-[14px] text-craie disabled:opacity-40">
                 Lire
               </button>
             </details>
@@ -170,7 +170,7 @@ export function CsvSheet() {
                 const res = resolutions[key];
                 const count = usable.filter((r) => keyOf(r) === key).length;
                 return (
-                  <li key={key} className="flex flex-col gap-2 border-t border-white/[0.07] py-3 first:border-t-0">
+                  <li key={key} className="flex flex-col gap-2 border-t border-voile/[0.07] py-3 first:border-t-0">
                     <div className="flex justify-between gap-3 text-[13px]">
                       <span className="repere">{key}</span>
                       <span className="text-ombre">

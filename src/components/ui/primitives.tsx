@@ -104,9 +104,9 @@ export function Eyebrow({ children, right }: { children: ReactNode; right?: Reac
 
 /** Jauge qui se remplit à l'apparition. */
 export function Gauge({ ratio, tone = "lumiere", delay = 0.4 }: { ratio: number; tone?: "lumiere" | "lavande" | "mood"; delay?: number }) {
-  const color = tone === "lavande" ? "var(--color-lavande)" : tone === "mood" ? "var(--mood)" : "#fff";
+  const color = tone === "lavande" ? "var(--color-lavande)" : tone === "mood" ? "var(--mood)" : "var(--color-craie)";
   return (
-    <div className="h-[5px] overflow-hidden rounded-full bg-white/[0.09]">
+    <div className="h-[5px] overflow-hidden rounded-full bg-voile/[0.09]">
       <motion.i
         className="block h-full origin-left rounded-full"
         style={{ background: color, width: `${Math.max(0, Math.min(1, ratio)) * 100}%` }}

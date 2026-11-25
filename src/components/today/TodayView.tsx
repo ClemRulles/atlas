@@ -87,7 +87,7 @@ function DailySentence({ tokens }: { tokens: Token[] }) {
         <motion.span
           key={`${i}-${w.text}`}
           aria-hidden="true"
-          className={`inline-block ${w.kind === "key" ? "font-medium text-mood italic" : w.kind === "name" ? "italic" : ""}`}
+          className={`inline-block ${w.kind === "key" ? "font-medium text-[var(--signe)] italic" : w.kind === "name" ? "italic" : ""}`}
           initial={reduce ? false : { opacity: 0, y: 10, filter: "blur(6px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.12 + i * 0.036 }}
@@ -164,8 +164,8 @@ function EvolutionBlock({ snapshot }: { snapshot: Snapshot }) {
               <span className="text-ombre"> · hors versements</span>
             </span>
             <span className="flex items-center gap-3 text-ombre">
-              <span className="flex items-center gap-1.5"><i className="block h-[2px] w-3 rounded bg-white" />valeur</span>
-              <span className="flex items-center gap-1.5"><i className="block h-0 w-3 border-t border-dashed border-white/40" />versé</span>
+              <span className="flex items-center gap-1.5"><i className="block h-[2px] w-3 rounded bg-craie" />valeur</span>
+              <span className="flex items-center gap-1.5"><i className="block h-0 w-3 border-t border-dashed border-voile/40" />versé</span>
             </span>
           </>
         )}
@@ -174,7 +174,7 @@ function EvolutionBlock({ snapshot }: { snapshot: Snapshot }) {
       <div className="verre relative grid grid-cols-4 rounded-full p-1" role="group" aria-label="Période">
         <motion.span
           aria-hidden="true"
-          className="absolute top-1 bottom-1 left-1 rounded-full bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,.12)]"
+          className="absolute top-1 bottom-1 left-1 rounded-full bg-voile/10 shadow-[var(--reflet)]"
           style={{ width: "calc((100% - 8px) / 4)" }}
           animate={{ x: `${index * 100}%` }}
           transition={{ type: "spring", stiffness: 380, damping: 34 }}
@@ -205,7 +205,7 @@ function LifeSlicesCard({ snapshot, expectedReturn }: { snapshot: Snapshot; expe
     <Card className="flex flex-col gap-4">
       <div className="flex items-baseline justify-between gap-3">
         <span className="repere">Morceaux de vie</span>
-        <button type="button" onClick={() => (haptic(), router.push("/patrimoine#depenses"))} className="touche repere rounded-full border border-white/10 px-2.5 py-1 hover:text-brume">
+        <button type="button" onClick={() => (haptic(), router.push("/patrimoine#depenses"))} className="touche repere rounded-full border border-voile/10 px-2.5 py-1 hover:text-brume">
           {formatPct(expectedReturn, { decimals: 1 })} / an · modifier
         </button>
       </div>
@@ -225,7 +225,7 @@ function LifeSlicesCard({ snapshot, expectedReturn }: { snapshot: Snapshot; expe
           </li>
         ))}
       </ul>
-      <p className="border-t border-white/10 pt-3.5 text-[13.5px] text-brume">
+      <p className="border-t border-voile/10 pt-3.5 text-[13.5px] text-brume">
         {life.next ? (
           <>
             Prochain palier : {life.next.expense.label.toLowerCase()} en entier, à <Money value={life.next.capitalNeededEUR ?? 0} /> de patrimoine.
@@ -254,7 +254,7 @@ function Positions({ snapshot, onSelect }: { snapshot: Snapshot; onSelect: (l: L
                     haptic();
                     onSelect(l);
                   }}
-                  className="touche grid w-full grid-cols-[minmax(0,1fr)_64px_auto] items-center gap-3 border-t border-white/[0.07] py-3.5 text-left"
+                  className="touche grid w-full grid-cols-[minmax(0,1fr)_64px_auto] items-center gap-3 border-t border-voile/[0.07] py-3.5 text-left"
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-[15px]">{l.instrument.name}</span>
@@ -309,7 +309,7 @@ function PositionSheet({ line, onClose, transactions, editable }: { line: LineVi
             <div className="flex flex-col gap-3">
               <span className="repere">Ce que tu pensais en achetant</span>
               {convictions.map((c) => (
-                <blockquote key={c.id} className="border-l border-white/20 pl-4 font-serif text-[18px] leading-snug italic">
+                <blockquote key={c.id} className="border-l border-voile/20 pl-4 font-serif text-[18px] leading-snug italic">
                   « {c.note} »
                   <footer className="mt-1 font-sans text-[12.5px] text-ombre not-italic">{longDate(c.date)}</footer>
                 </blockquote>
@@ -329,7 +329,7 @@ function PositionSheet({ line, onClose, transactions, editable }: { line: LineVi
               <span className="repere mt-2">Transactions</span>
               <ul className="flex flex-col">
                 {own.map((t) => (
-                  <li key={t.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-white/[0.07] py-2.5 text-[14px] first:border-t-0">
+                  <li key={t.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-voile/[0.07] py-2.5 text-[14px] first:border-t-0">
                     <span className="min-w-0">
                       <span className={t.side === "buy" ? "" : "text-braise"}>{t.side === "buy" ? "Achat" : "Vente"}</span> de {formatNumber(t.quantity, { decimals: t.quantity % 1 ? 3 : 0 })} à {formatNumber(t.price, { decimals: 2 })} {line.instrument.currency}
                       <span className="block text-[12.5px] text-ombre">{[longDate(t.date), t.broker].filter(Boolean).join(" · ")}</span>
@@ -367,7 +367,7 @@ function MarketFreshness() {
       ) : market.updatedAt ? (
         <>
           <span>Cours différés · mis à jour à {new Intl.DateTimeFormat("fr-BE", { hour: "2-digit", minute: "2-digit" }).format(new Date(market.updatedAt))}</span>
-          <button type="button" onClick={() => refreshMarket(true)} className="touche underline decoration-white/20 underline-offset-2 hover:text-brume">
+          <button type="button" onClick={() => refreshMarket(true)} className="touche underline decoration-voile/20 underline-offset-2 hover:text-brume">
             actualiser
           </button>
         </>

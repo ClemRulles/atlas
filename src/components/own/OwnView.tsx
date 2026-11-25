@@ -57,9 +57,9 @@ function Hero({ snapshot, instruments, counted }: { snapshot: Snapshot; instrume
   const e = snapshot.exposure;
   const share = (v: number) => (e.totalEUR > 0 ? v / e.totalEUR : 0);
   const parts = [
-    { label: "Détaillé", value: e.detailedEUR, cls: "bg-white" },
+    { label: "Détaillé", value: e.detailedEUR, cls: "bg-craie" },
     { label: "Non publié par l'émetteur", value: e.undetailedEUR, cls: "hachures" },
-    { label: "Composition indisponible", value: e.unavailableEUR, cls: "bg-white/[0.12]" },
+    { label: "Composition indisponible", value: e.unavailableEUR, cls: "bg-voile/[0.12]" },
   ].filter((p) => p.value > 0);
   // Tant qu'aucune composition de fonds n'est connue, on ne prétend pas compter les entreprises.
   const blind = e.totalEUR > 0 && e.unavailableEUR / e.totalEUR > 0.5;
@@ -141,7 +141,7 @@ function TopCompanies({ snapshot, instruments, onSelect }: { snapshot: Snapshot;
             <button
               type="button"
               onClick={() => (haptic(), onSelect(c))}
-              className="touche grid w-full grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-t border-white/[0.07] py-3 text-left first:border-t-0"
+              className="touche grid w-full grid-cols-[22px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-t border-voile/[0.07] py-3 text-left first:border-t-0"
             >
               <span className="font-mono text-[12px] text-ombre tabular">{String(i + 1).padStart(2, "0")}</span>
               <span className="min-w-0">
@@ -153,9 +153,9 @@ function TopCompanies({ snapshot, instruments, onSelect }: { snapshot: Snapshot;
                 <Money value={c.valueEUR} className="block text-[12.5px] text-ombre" />
               </span>
               <span />
-              <span className="col-span-2 h-[3px] overflow-hidden rounded-full bg-white/[0.07]">
+              <span className="col-span-2 h-[3px] overflow-hidden rounded-full bg-voile/[0.07]">
                 <motion.i
-                  className="block h-full origin-left rounded-full bg-white/80"
+                  className="block h-full origin-left rounded-full bg-voile/80"
                   style={{ width: `${(c.weight / max) * 100}%` }}
                   initial={{ scaleX: 0 }}
                   animate={{ scaleX: 1 }}
@@ -194,12 +194,12 @@ function ProfitsCard({ snapshot, instruments }: { snapshot: Snapshot; instrument
       {splitKnown ? (
       <>
       <div className="flex h-3 gap-[2px] overflow-hidden rounded-full" role="img" aria-label="Part versée en dividendes et part réinvestie">
-        <motion.i className="block h-full rounded-[3px] bg-white" initial={{ flexGrow: 0 }} animate={{ flexGrow: divShare }} style={{ flexBasis: 0 }} transition={{ duration: 1.1, ease, delay: 0.4 }} />
+        <motion.i className="block h-full rounded-[3px] bg-craie" initial={{ flexGrow: 0 }} animate={{ flexGrow: divShare }} style={{ flexBasis: 0 }} transition={{ duration: 1.1, ease, delay: 0.4 }} />
         <motion.i className="block h-full rounded-[3px] bg-lavande" initial={{ flexGrow: 0 }} animate={{ flexGrow: 1 - divShare }} style={{ flexBasis: 0 }} transition={{ duration: 1.1, ease, delay: 0.5 }} />
       </div>
       <dl className="grid grid-cols-2 gap-4 text-[14px]">
         <div>
-          <dt className="flex items-center gap-2 text-brume"><i className="block h-2.5 w-2.5 rounded-[3px] bg-white" />Versés en dividendes</dt>
+          <dt className="flex items-center gap-2 text-brume"><i className="block h-2.5 w-2.5 rounded-[3px] bg-craie" />Versés en dividendes</dt>
           <dd className="mt-1 text-[17px]"><Money value={e.dividendsEUR} /></dd>
         </div>
         <div>
@@ -241,8 +241,8 @@ function GlobeCard({ snapshot }: { snapshot: Snapshot }) {
         </p>
       )}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-brume">
-        <span className="flex items-center gap-2"><i className="block h-2 w-2 rounded-full bg-[#9ea3ff]" />Ton argent, par pays</span>
-        <span className="flex items-center gap-2"><i className="block h-2 w-2 rounded-full bg-[#ffdb8c]" />Place ouverte</span>
+        <span className="flex items-center gap-2"><i className="block h-2 w-2 rounded-full bg-[var(--globe-pays)]" />Ton argent, par pays</span>
+        <span className="flex items-center gap-2"><i className="block h-2 w-2 rounded-full bg-[var(--globe-place)]" />Place ouverte</span>
       </div>
       <p className="text-[13px] text-ombre">
         {open.length ? `Ouvertes maintenant : ${open.map((x) => x.city).join(", ")}.` : "Toutes les places suivies sont fermées en ce moment."} Horaires indicatifs, sans les jours fériés.
@@ -283,7 +283,7 @@ function Breakdowns({ snapshot }: { snapshot: Snapshot }) {
         <div className="verre relative grid w-full grid-cols-3 rounded-full p-1 sm:w-80" role="group" aria-label="Axe de répartition">
           <motion.span
             aria-hidden="true"
-            className="absolute top-1 bottom-1 left-1 rounded-full bg-white/10"
+            className="absolute top-1 bottom-1 left-1 rounded-full bg-voile/10"
             style={{ width: "calc((100% - 8px) / 3)" }}
             animate={{ x: `${index * 100}%` }}
             transition={{ type: "spring", stiffness: 380, damping: 34 }}
@@ -438,8 +438,8 @@ function CompanySheet({ company, instruments, onClose }: { company: CompanyExpos
                   <span className="truncate">{instruments[v.instrumentId]?.type === "stock" ? "En direct" : instruments[v.instrumentId]?.name}</span>
                   <Money value={v.valueEUR} className="text-brume" />
                 </div>
-                <div className="h-[3px] overflow-hidden rounded-full bg-white/[0.07]">
-                  <motion.i className="block h-full origin-left rounded-full bg-white/80" style={{ width: `${(v.valueEUR / company.valueEUR) * 100}%` }} initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 0.9, ease, delay: 0.2 }} />
+                <div className="h-[3px] overflow-hidden rounded-full bg-voile/[0.07]">
+                  <motion.i className="block h-full origin-left rounded-full bg-voile/80" style={{ width: `${(v.valueEUR / company.valueEUR) * 100}%` }} initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 0.9, ease, delay: 0.2 }} />
                 </div>
               </div>
             ))}
@@ -476,11 +476,11 @@ function CompanyNews({ symbol, name }: { symbol?: string; name: string }) {
   }, [symbol]);
 
   if (!symbol) {
-    return <p className="rounded-[18px] border border-white/[0.07] bg-white/[0.03] p-4 text-[13.5px] text-brume">Pas de ticker connu pour {name} : actualités et résultats indisponibles.</p>;
+    return <p className="rounded-[18px] border border-voile/[0.07] bg-voile/[0.03] p-4 text-[13.5px] text-brume">Pas de ticker connu pour {name} : actualités et résultats indisponibles.</p>;
   }
   return (
     <div className="grid gap-3 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-      <div className="flex flex-col gap-3 rounded-[18px] border border-white/[0.07] bg-white/[0.03] p-4">
+      <div className="flex flex-col gap-3 rounded-[18px] border border-voile/[0.07] bg-voile/[0.03] p-4">
         <span className="repere">Actualités récentes</span>
         {!info && !failed && [0, 1].map((i) => <div key={i} className="silhouette h-10" />)}
         {failed && <p className="text-[13.5px] text-brume">Actualités indisponibles pour le moment.</p>}
@@ -492,7 +492,7 @@ function CompanyNews({ symbol, name }: { symbol?: string; name: string }) {
           </a>
         ))}
       </div>
-      <div className="flex flex-col gap-2 rounded-[18px] border border-white/[0.07] bg-white/[0.03] p-4">
+      <div className="flex flex-col gap-2 rounded-[18px] border border-voile/[0.07] bg-voile/[0.03] p-4">
         <span className="repere">Prochains résultats</span>
         {!info && !failed && <div className="silhouette h-10" />}
         {info && (

@@ -209,7 +209,7 @@ export function LockScreen() {
       <Link
         href="/login"
         onClick={(e) => e.stopPropagation()}
-        className={`absolute inset-x-0 bottom-[calc(18px+env(safe-area-inset-bottom))] z-10 mx-auto w-max text-[13px] text-ombre underline decoration-white/15 underline-offset-4 transition-opacity ${opening ? "opacity-0" : ""}`}
+        className={`absolute inset-x-0 bottom-[calc(18px+env(safe-area-inset-bottom))] z-10 mx-auto w-max text-[13px] text-ombre underline decoration-voile/15 underline-offset-4 transition-opacity ${opening ? "opacity-0" : ""}`}
       >
         Utiliser mon mot de passe
       </Link>

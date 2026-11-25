@@ -94,12 +94,12 @@ export function WealthChart({ points, height = 170, animationKey, onScrub }: {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.9, delay: 0.35 }}
           />
-          <path d={geo.invested} fill="none" stroke="rgba(255,255,255,.28)" strokeWidth={1.25} strokeDasharray="3 5" strokeLinecap="round" />
+          <path d={geo.invested} fill="none" style={{ stroke: "color-mix(in oklab, var(--color-craie) 28%, transparent)" }} strokeWidth={1.25} strokeDasharray="3 5" strokeLinecap="round" />
           <motion.path
             key={`l-${animationKey}`}
             d={geo.line}
             fill="none"
-            stroke="#fff"
+            stroke="var(--color-craie)"
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -114,10 +114,10 @@ export function WealthChart({ points, height = 170, animationKey, onScrub }: {
         <>
           <div
             className="pointer-events-none absolute top-0 bottom-0 w-px transition-opacity duration-200"
-            style={{ left: marker.x, opacity: active !== null ? 1 : 0, background: "linear-gradient(180deg, transparent, rgba(255,255,255,.35) 20%, rgba(255,255,255,.35) 80%, transparent)" }}
+            style={{ left: marker.x, opacity: active !== null ? 1 : 0, background: "linear-gradient(180deg, transparent, color-mix(in oklab, var(--color-craie) 35%, transparent) 20%, color-mix(in oklab, var(--color-craie) 35%, transparent) 80%, transparent)" }}
           />
           <div
-            className={`pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white ${active === null ? "pouls" : ""}`}
+            className={`pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-craie ${active === null ? "pouls" : ""}`}
             style={{ left: marker.x, top: marker.y, boxShadow: "0 0 0 2px var(--color-nuit), 0 0 16px 2px var(--mood)" }}
           />
         </>
