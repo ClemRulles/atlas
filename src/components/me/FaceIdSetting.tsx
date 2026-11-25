@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { IconFaceId } from "@/components/lock/LockScreen";
-import { biometricName, cancelled, disablePasskey, enablePasskey, forgetUnlock, passkeySupported, readLock, type LockInfo } from "@/lib/passkey-client";
+import { biometricName, cancelled, disablePasskey, explain, enablePasskey, forgetUnlock, passkeySupported, readLock, type LockInfo } from "@/lib/passkey-client";
 import { haptic } from "@/lib/ui";
 
 /** Réglage Face ID (ou Touch ID) de cet appareil, dans « Mes données ». */
@@ -36,7 +36,7 @@ export function FaceIdSetting({ user }: { user: { id: string; name: string } }) 
       haptic(18);
       setMessage({ text: `${bio} est activé. La prochaine ouverture se fera d'un regard.`, tone: "ok" });
     } catch (err) {
-      if (!cancelled(err)) setMessage({ text: err instanceof Error ? err.message : "Activation impossible.", tone: "error" });
+      if (!cancelled(err)) setMessage({ text: explain(err), tone: "error" });
     } finally {
       setBusy(false);
     }

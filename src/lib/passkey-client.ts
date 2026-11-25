@@ -72,7 +72,19 @@ async function json<T>(res: Response): Promise<T> {
 /** Crée une clé d'accès sur cet appareil pour le compte connecté et mémorise le verrou. */
 export async function enablePasskey(user: { id: string; name: string }): Promise<LockInfo> {
   const optionsJSON = await json<Parameters<typeof startRegistration>[0]["optionsJSON"]>(await fetch("/api/auth/passkey/register", { cache: "no-store" }));
-  const response = await startRegistration({ optionsJSON });
+  let response: Awaited<ReturnType<typeof startRegistration>>;
+  try {
+    response = await startRegistration({ optionsJSON });
+  } catch (err) {
+    // Une clé de ce compte existe déjà sur cet appareil (créée depuis Safari ou lors d'un essai) :
+    // on la réutilise en la faisant signer, ce qui mémorise aussi le verrou ici.
+    if ((err as { code?: string }).code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") {
+      await unlockWithPasskey();
+      const info = readLock();
+      if (info) return info;
+    }
+    throw err;
+  }
   const label = `${biometricName()} · ${new Intl.DateTimeFormat("fr-BE", { day: "numeric", month: "short", year: "numeric" }).format(new Date())}`;
   await json(await fetch("/api/auth/passkey/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ response, label }) }));
   const info = { credentialId: response.id, name: user.name, userId: user.id };
@@ -98,6 +110,17 @@ export async function unlockWithPasskey(): Promise<{ id: string; name: string }>
   writeLock({ credentialId: response.id, name: user.name, userId: user.id });
   markUnlocked();
   return user;
+}
+
+/** Message en français pour une erreur de clé d'accès. */
+export function explain(err: unknown): string {
+  const code = (err as { code?: string }).code;
+  if (code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") return `${biometricName()} est déjà prêt sur cet appareil.`;
+  if (err instanceof TypeError) return "Pas de connexion : réessaie quand tu as du réseau.";
+  if (err instanceof Error && /^[A-Z]/.test(err.message) && /[a-z] [a-z]/.test(err.message) && !/[éèàç]/.test(err.message)) {
+    return `${biometricName()} n'a pas pu aboutir. Réessaie.`;
+  }
+  return err instanceof Error ? err.message : "Opération impossible.";
 }
 
 /** L'utilisateur a fermé la fenêtre Face ID, ou le navigateur l'a refusée sans geste. */

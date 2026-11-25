@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { PrimaryButton, TextInput } from "@/components/ui/fields";
 import { AtlasOrb, type OrbState } from "@/components/lock/AtlasOrb";
 import { IconFaceId } from "@/components/lock/LockScreen";
-import { biometricName, cancelled, enablePasskey, markArrival, markUnlocked, passkeySupported, readLock, unlockWithPasskey } from "@/lib/passkey-client";
+import { biometricName, cancelled, enablePasskey, explain, markArrival, markUnlocked, passkeySupported, readLock, unlockWithPasskey } from "@/lib/passkey-client";
 import { haptic } from "@/lib/ui";
 
 const ease = [0.16, 1, 0.3, 1] as const;
@@ -80,7 +80,7 @@ export default function LoginPage() {
       goHome();
     } catch (err) {
       setOrb(cancelled(err) ? "idle" : "error");
-      setError(cancelled(err) ? null : err instanceof Error ? `${err.message} Utilise ton mot de passe une fois pour activer ${biometricName()} sur cet appareil.` : "Connexion impossible.");
+      setError(cancelled(err) ? null : err instanceof Error ? `${explain(err)} Utilise ton mot de passe une fois pour activer ${biometricName()} sur cet appareil.` : "Connexion impossible.");
       setBusy(false);
     }
   }
@@ -98,7 +98,7 @@ export default function LoginPage() {
       goHome();
     } catch (err) {
       setOrb(cancelled(err) ? "idle" : "error");
-      setError(cancelled(err) ? null : err instanceof Error ? err.message : "Activation impossible.");
+      setError(cancelled(err) ? null : explain(err));
       setBusy(false);
     }
   }

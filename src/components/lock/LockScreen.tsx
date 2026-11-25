@@ -7,6 +7,7 @@ import { haptic } from "@/lib/ui";
 import {
   biometricName,
   cancelled,
+  explain,
   forgetUnlock,
   greeting,
   hiddenTooLong,
@@ -140,9 +141,7 @@ export function LockScreen() {
               ? "Annulé. Touche l'orbe pour réessayer."
               : err instanceof TypeError
                 ? "Pas de connexion : Atlas ne peut pas vérifier ta clé pour l'instant."
-                : err instanceof Error
-                  ? err.message
-                  : "Déverrouillage impossible.",
+                : explain(err),
           );
         }
       } finally {
